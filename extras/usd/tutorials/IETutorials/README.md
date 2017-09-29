@@ -32,16 +32,16 @@ A bunch of examples to learn USD & Hydra C++ APIs
         * point, spot, area, directional?
     * shadowing [spot light shadow](hydra/shadowing)
         * point, spot, area, directional?
-    * subd
+    * subd [subd](hydra/subd)
         *
     * displacement
         *
-    * instancing
+    * [instancing](hydra/instancing) 
         *
     * deformation
         *
-    * points
-        *
+    * points [simple animated points](hydra/points)
+        * 
     * curves
         *
     * picking
@@ -52,7 +52,6 @@ A bunch of examples to learn USD & Hydra C++ APIs
         * 
     * embree
         *
-
      
 ### Hello World
 ### Simple Object     
