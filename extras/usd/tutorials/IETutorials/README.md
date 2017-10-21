@@ -67,3 +67,11 @@ Lattice of points where the width primvar is animated.
 Array of curves with simple animation.
 
 ![curves](images/hydra_curves.png)
+
+## To Do
+
+* shadows
+* displacement
+* volume ray marching
+* Render Targets & post processing
+
