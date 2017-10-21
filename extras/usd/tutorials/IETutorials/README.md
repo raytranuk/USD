@@ -1,81 +1,69 @@
 # USD-tests
 
-
-A bunch of examples to learn USD & Hydra C++ APIs
-
+A bunch of examples to learn USD & Hydra C++ API
 
 ## Build Instructions
 
-
-* Update top level CMakeLists.txt to point to USD installation
-* ```mkdir USD-tests.build```
-* ```cd USD-tests.build```
-* ```cmake USD-tests```
-* ```make```
-
+Using the USD build script **build_usd.py** should also build the following examples.
 
 ## Examples
 
-* hydra [*hydra renderer examples*](hydra)
-    * helloWorld [*Simple single triangle rendered using Hydra*](hydra/helloWorld)
-    * simpleObject *simple .obj - lambert lit solid color object*
-        * [tinyObj](https://github.com/syoyo/tinyobjloader)
-        * [teapot](http://g3d.cs.williams.edu/g3d/data10/common/model/teapot/teapot.zip) 
-    * shader [*triangle with a solid color shader assigned*](hydra/shader)
-        * lighting has to be enabled for the shader to be activated
-        * animated shader constant 
-    * texturing [*quad with a texture*](hydra/texturing)
-        * creating a primvar results in GLSL functions for reading and they're automatically synced
-        * demonstrate creation & rendering of UVs
-    * lighting [simple light moving around a static object](hydra/lighting)
-        * create a procedural cube
-        * point, spot, area, directional?
-    * shadowing [spot light shadow](hydra/shadowing)
-        * point, spot, area, directional?
-    * subd [subd](hydra/subd)
-        *
-    * displacement
-        *
-    * [instancing](hydra/instancing) 
-        *
-    * deformation
-        *
-    * points [simple animated points](hydra/points)
-        * 
-    * curves
-        *
-    * picking
-        *
-    * shading
-        *    
-    * render targets
-        * 
-    * embree
-        *
-     
 ### Hello World
-### Simple Object     
+
+The graphics equivalent of the 'Hello World' application, a window with a single triangle. 
+
+![helloWorld](images/hydra_hello_world.png)
+
+### Simple Object
+
+Display a teapot .obj file.
+
+![simpleObject](images/hydra_simple_object.png)
+
 ### Shader
+
+Constant shader on a cube with animated color parameter.
+
+![shader](images/hydra_shader.png)
+
+### Texturing
+
+Texture displayed on a Quad.
+
+![texturing](images/hydra_texturing.png)
+
 ### Lighting
-### Shadowing
+
+Spinning lit cube.
+
+![lighting](images/hydra_lighting.png)
+
 ### SubD
-### Displacement
+
+Subdivided plane & vertex animated cube.
+
+![subd](images/hydra_subd.png)
+
 ### Instancing
+
+Instance an array of cubes.
+
+![instancing](images/hydra_instancing.png)
+
 ### Deformation
+
+Plane with simple animated deformation.
+
+![deformation](images/hydra_deformation.png)
+
 ### Points
+
+Lattice of points where the width primvar is animated.
+
+![points](images/hydra_points.png)
+
 ### Curves
-### Picking
-### Embree
-        
-## Questions & Todo
 
-Why doesn't `template<T> HdRenderIndex::InsertTask` return the newly created Task as `boost::shared_ptr<T>`?
+Array of curves with simple animation.
 
-What are working definitions of the imaging libraries: Hd, Hdx & HdSt?
-
-
-Hydra Engine include introduce a ptyhon dependency?
-
-~~~
-#include "pxr/imaging/hd/engine.h"
-~~~~
+![curves](images/hydra_curves.png)
