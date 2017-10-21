@@ -90,7 +90,7 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 			{
 				for (size_t k = 0; k < 4; ++k)
 				{
-					points.push_back(pxr::GfVec3f(i * cellSize, k * 0.25 , j * cellSize) - pxr::GfVec3f(0.5f * size, 0.5f *size, 0.5f *size));
+					points.push_back(pxr::GfVec3f(i * cellSize + sin(rotation * 0.01f + 0.1f * (i+j+k)) * 0.01f * k, k * 0.25 , j * cellSize + cos(rotation * 0.01 + 0.1f *(i+j+k)) * 0.1f * k) - pxr::GfVec3f(0.5f * size, 0.5f *size, 0.5f *size));
 				}
 			}
 		}
@@ -120,7 +120,7 @@ pxr::GfMatrix4d SceneDelegate::GetTransform(pxr::SdfPath const &id)
 	if (id == pxr::SdfPath("/curves") )
 	{
 		pxr::GfMatrix4d m ;
-		m.SetTransform(pxr::GfRotation(pxr::GfVec3d(0,1,0), 0.05f * rotation) , pxr::GfVec3d(0,0,0));
+		m.SetTransform(pxr::GfRotation(pxr::GfVec3d(0,1,0), 0.005f * rotation) , pxr::GfVec3d(0,0,0));
 		return m;
 	}
 }
@@ -139,7 +139,7 @@ void SceneDelegate::UpdateTransform()
 {
 	rotation += 1.0f;
 
-	GetRenderIndex().GetChangeTracker().MarkRprimDirty(pxr::SdfPath("/curves"), pxr::HdChangeTracker::DirtyTransform);
+	GetRenderIndex().GetChangeTracker().MarkRprimDirty(pxr::SdfPath("/curves"), pxr::HdChangeTracker::DirtyTransform | pxr::HdChangeTracker::DirtyPoints);
 
 }
 
@@ -165,15 +165,6 @@ pxr::HdBasisCurvesTopology SceneDelegate::GetBasisCurvesTopology(pxr::SdfPath co
 			}
 		}
 	}
-
-
-//
-//	const TfToken &curveType,
-//	const TfToken &curveBasis,
-//	const TfToken &curveWrap,
-//	const VtIntArray &curveVertexCounts,
-//	const VtIntArray &curveIndices
-//
 
 	return pxr::HdBasisCurvesTopology(pxr::HdTokens->cubic, pxr::HdTokens->bezier, pxr::HdTokens->nonperiodic, curveVertexCounts, curveIndices );
 }
