@@ -70,7 +70,7 @@ public:
 		glDepthFunc(GL_LESS);
 		glEnable(GL_DEPTH_TEST);
 
-		//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE);
 
 		// execute the render tasks
 		engine.Execute( *index, tasks );
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
 {
 	if (true)
 	{
-		pxr::TfDebug::Enable(pxr::HD_DUMP_SHADER_SOURCE);
+		//pxr::TfDebug::Enable(pxr::HD_DUMP_SHADER_SOURCE);
 	}
 
 	// create a window, GLContext & extensions

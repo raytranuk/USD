@@ -42,4 +42,5 @@ private:
 	pxr::SdfPath cameraPath;
 
 	float rotation;
+	float time;
 };

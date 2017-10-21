@@ -18,7 +18,8 @@
 
 SceneDelegate::SceneDelegate(pxr::HdRenderIndex *parentIndex, pxr::SdfPath const &delegateID)
  : pxr::HdSceneDelegate(parentIndex, delegateID),
-		rotation(0.0)
+		rotation(0.0),
+		time(0.0)
 {
 	cameraPath = pxr::SdfPath("/camera");
 	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->camera, this, cameraPath);
@@ -67,7 +68,7 @@ void SceneDelegate::AddRenderTask(pxr::SdfPath const &id)
 	GetRenderIndex().InsertTask<pxr::HdxRenderTask>(this, id);
 	_ValueCache &cache = _valueCacheMap[id];
 	cache[pxr::HdTokens->children] = pxr::VtValue(pxr::SdfPathVector());
-	cache[pxr::HdTokens->collection] = pxr::HdRprimCollection(pxr::HdTokens->geometry, pxr::HdTokens->smoothHull);
+	cache[pxr::HdTokens->collection] = pxr::HdRprimCollection(pxr::HdTokens->geometry, pxr::HdTokens->refined);
 }
 
 void SceneDelegate::AddRenderSetupTask(pxr::SdfPath const &id)
@@ -113,7 +114,7 @@ void SceneDelegate::SetCamera(pxr::SdfPath const &cameraId, pxr::GfMatrix4d cons
 
 pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 {
-	std::cout << "Get-" << "[" << id.GetString() <<"][" << key << "]" << std::endl;
+	//std::cout << "Get-" << "[" << id.GetString() <<"][" << key << "]" << std::endl;
 	_ValueCache *vcache = pxr::TfMapLookupPtr(_valueCacheMap, id);
 	pxr::VtValue ret;
 	if (vcache && pxr::TfMapLookup(*vcache, key, &ret)) {
@@ -136,11 +137,11 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 			pxr::VtVec3fArray points;
 
 			points.push_back(pxr::GfVec3f(0,0,0));
-			points.push_back(pxr::GfVec3f(1,0,0));
+			points.push_back(pxr::GfVec3f(5.0f * sin(time) * sin(time),0,0));
 			points.push_back(pxr::GfVec3f(1,1,0));
 			points.push_back(pxr::GfVec3f(0,1,0));
 
-			points.push_back(pxr::GfVec3f(0,0,1));
+			points.push_back(pxr::GfVec3f(0,0,5.0f * cos(time) * cos(time)));
 			points.push_back(pxr::GfVec3f(1,0,1));
 			points.push_back(pxr::GfVec3f(1,1,1));
 			points.push_back(pxr::GfVec3f(0,1,1));
@@ -152,43 +153,6 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 			return pxr::VtValue(points);
 		}
 
-		if (key == pxr::HdTokens->normals)
-		{
-			pxr::VtVec3fArray normals;
-
-			normals.push_back(pxr::GfVec3f(0,0,-1));
-			normals.push_back(pxr::GfVec3f(0,0,-1));
-			normals.push_back(pxr::GfVec3f(0,0,-1));
-			normals.push_back(pxr::GfVec3f(0,0,-1));
-
-			normals.push_back(pxr::GfVec3f(0,0,1));
-			normals.push_back(pxr::GfVec3f(0,0,1));
-			normals.push_back(pxr::GfVec3f(0,0,1));
-			normals.push_back(pxr::GfVec3f(0,0,1));
-
-			normals.push_back(pxr::GfVec3f(1,0,0));
-			normals.push_back(pxr::GfVec3f(1,0,0));
-			normals.push_back(pxr::GfVec3f(1,0,0));
-			normals.push_back(pxr::GfVec3f(1,0,0));
-
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-
-			normals.push_back(pxr::GfVec3f(-1,0,0));
-			normals.push_back(pxr::GfVec3f(-1,0,0));
-			normals.push_back(pxr::GfVec3f(-1,0,0));
-			normals.push_back(pxr::GfVec3f(-1,0,0));
-
-			normals.push_back(pxr::GfVec3f(0,-1,0));
-			normals.push_back(pxr::GfVec3f(0,-1,0));
-			normals.push_back(pxr::GfVec3f(0,-1,0));
-			normals.push_back(pxr::GfVec3f(0,-1,0));
-
-
-			return pxr::VtValue(normals);
-		}
 	}
 	else if (id == pxr::SdfPath("/plane"))
 	{
@@ -208,19 +172,6 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 		}
 
 
-		if (key == pxr::HdTokens->normals)
-		{
-			pxr::VtVec3fArray normals;
-
-
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-			normals.push_back(pxr::GfVec3f(0,1,0));
-
-
-			return pxr::VtValue(normals);
-		}
 	}
 
 
@@ -263,7 +214,7 @@ pxr::GfMatrix4d SceneDelegate::GetTransform(pxr::SdfPath const &id)
 
 pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 {
-	std::cout << "[" << id.GetString() <<"][Topology]" << std::endl;
+	//std::cout << "[" << id.GetString() <<"][Topology]" << std::endl;
 
 	if ( id == pxr::SdfPath("/plane"))
 	{
@@ -328,7 +279,7 @@ pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 
 pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
 {
-	std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
+	//std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
 
 	pxr::TfTokenVector names;
 	names.push_back(pxr::HdTokens->points);
@@ -339,19 +290,19 @@ pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
 
 pxr::TfTokenVector SceneDelegate::GetPrimVarFacevaryingNames(pxr::SdfPath const& id)
 {
-	std::cout << "[" << id.GetString() <<"][GetPrimVarFacevaryingNames]" << std::endl;
+	//std::cout << "[" << id.GetString() <<"][GetPrimVarFacevaryingNames]" << std::endl;
 	pxr::TfTokenVector names;
 	return names;
 }
 
 void SceneDelegate::UpdateCubeTransform()
 {
-	rotation += 0.1f;
-
-	GetRenderIndex().GetChangeTracker().MarkRprimDirty(pxr::SdfPath("/cube"), pxr::HdChangeTracker::DirtyTransform);
+	//rotation += 0.1f;
+	time += 0.001f;
+	GetRenderIndex().GetChangeTracker().MarkRprimDirty(pxr::SdfPath("/cube"), pxr::HdChangeTracker::DirtyTransform | pxr::HdChangeTracker::DirtyPoints);
 }
 
 int SceneDelegate::GetRefineLevel(pxr::SdfPath const& id)
 {
-	return 3;
+	return 5;
 }
