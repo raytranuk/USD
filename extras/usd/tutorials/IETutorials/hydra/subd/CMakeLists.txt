@@ -2,9 +2,6 @@ add_executable (subd
         main.cpp
         SceneDelegate.cpp SceneDelegate.h)
 
-find_package(PythonLibs)
-find_package(OpenGL)
-
 target_include_directories(subd
         PUBLIC
             ${USD_INC_DIR}
@@ -28,7 +25,11 @@ target_link_libraries(
                 ${USD_LIB_DIR}/libvt.so
                 ${USD_LIB_DIR}/libpxOsd.so
                 ${USD_LIB_DIR}/libosdCPU.so
-                ${USD_LIB_DIR}/libboost_python.so # todo find library
+                ${USD_LIB_DIR}/libboost_python.so 
                 ${PYTHON_LIBRARY}
                 ${OPENGL_LIBRARIES}
+        )
+
+install(TARGETS subd
+        RUNTIME DESTINATION hydra-examples/bin
         )

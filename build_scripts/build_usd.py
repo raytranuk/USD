@@ -172,7 +172,7 @@ def CopyDirectory(context, srcDir, destDir):
                        .format(srcDir=srcDir, destDir=instDestDir))
     shutil.copytree(srcDir, instDestDir)
 
-def RunCMake(context, force, extraArgs = None):
+def RunCMake(context, force, extraArgs = None, debug = False):
     """Invoke CMake to configure, build, and install a library whose 
     source code is located in the current working directory."""
     # Create a directory for out-of-source builds in the build directory
@@ -208,23 +208,29 @@ def RunCMake(context, force, extraArgs = None):
     if MacOS():
         osx_rpath = "-DCMAKE_MACOSX_RPATH=ON"
 
+    config = "Release"
+    if debug:
+        config = "Debug"
+
     with CurrentWorkingDirectory(buildDir):
         Run('cmake '
             '-DCMAKE_INSTALL_PREFIX="{instDir}" '
             '-DCMAKE_PREFIX_PATH="{depsInstDir}" '
+            '-DCMAKE_BUILD_TYPE={config}'
             '{osx_rpath} '
             '{generator} '
             '{extraArgs} '
             '"{srcDir}"'
             .format(instDir=instDir,
                     depsInstDir=context.instDir,
+                    config=config,
                     srcDir=srcDir,
                     osx_rpath=(osx_rpath or ""),
                     generator=(generator or ""),
                     extraArgs=(" ".join(extraArgs) if extraArgs else "")))
-        Run("cmake --build . --config Release --target install -- {multiproc}"
-            .format(multiproc=("/M:{procs}" if Windows() else "-j{procs}")
-                               .format(procs=context.numJobs)))
+        Run("cmake --build . --config {config} --target install -- {multiproc} VERBOSE=1"
+            .format(config=config, multiproc=("/M:{procs}" if Windows() else "-j{procs}")
+                               .format(procs=multiprocessing.cpu_count() - 2)))
 
 def PatchFile(filename, patches):
     """Applies patches to the specified file. patches is a list of tuples
@@ -937,7 +943,14 @@ def InstallUSD(context):
             # Increase the precompiled header buffer limit.
             extraArgs.append('-DCMAKE_CXX_FLAGS="/Zm150"')
 
-        RunCMake(context, False, extraArgs)
+        RunCMake(context, False, extraArgs, debug=context.debug)
+
+
+def InstallHydraTutorials(context):
+
+    with CurrentWorkingDirectory(os.path.join(context.usdSrcDir, "extras/usd/tutorials/IETutorials")):
+
+        RunCMake(context, False, ['-DUSD_ROOT_DIR={0}'.format(context.usdInstDir)], debug=True)
 
 ############################################################
 # Install script
@@ -979,6 +992,8 @@ group.add_argument("--build", type=str,
 group.add_argument("--generator", type=str,
                    help=("CMake generator to use when building libraries with "
                          "cmake"))
+
+group.add_argument("--debug", dest="debug", action="store_true")
 
 (SHARED_LIBS, MONOLITHIC_LIB) = (0, 1)
 subgroup = group.add_mutually_exclusive_group()
@@ -1096,6 +1111,10 @@ subgroup.add_argument("--no-houdini", dest="build_houdini", action="store_false"
 group.add_argument("--houdini-location", type=str,
                    help="Directory where Houdini is installed.")
 
+
+group = parser.add_argument_group(title="Hydra Examples Options")
+group.add_argument("--no-hydra-demos", dest="hydra_demos", action="store_false")
+
 args = parser.parse_args()
 
 class InstallContext:
@@ -1129,6 +1148,9 @@ class InstallContext:
 
         # Number of jobs
         self.numJobs = args.jobs
+	
+	# debug build
+        self.debug = args.debug
 
         # Build type
         self.buildShared = (args.build_type == SHARED_LIBS)
@@ -1174,7 +1196,9 @@ class InstallContext:
         self.buildHoudini = args.build_houdini
         self.houdiniLocation = (os.path.abspath(args.houdini_location)
                                 if args.houdini_location else None)
-       
+
+        self.buildHydraDemos = args.hydra_demos
+
     def ForceBuildDependency(self, dep):
         # Never force building a Python dependency, since users are required
         # to build these dependencies themselves.
@@ -1316,6 +1340,7 @@ if JPEG in requiredDependencies:
 # Summarize
 Print("""
 Building with settings:
+  Debug                         {debug}
   USD source directory          {usdSrcDir}
   USD install directory         {usdInstDir}
   3rd-party source directory    {srcDir}
@@ -1338,7 +1363,9 @@ Building with settings:
     Houdini Plugin              {buildHoudini}
 
     Dependencies                {dependencies}
+    Hydra Demos                 {buildHydraDemos}
 """.format(
+    debug=("On" if context.debug else "Off"),
     usdSrcDir=context.usdSrcDir,
     usdInstDir=context.usdInstDir,
     srcDir=context.srcDir,
@@ -1362,7 +1389,8 @@ Building with settings:
     enableHDF5=("On" if context.enableHDF5 else "Off"),
     buildMaya=("On" if context.buildMaya else "Off"),
     buildKatana=("On" if context.buildKatana else "Off"),
-    buildHoudini=("On" if context.buildHoudini else "Off")))
+    buildHoudini=("On" if context.buildHoudini else "Off"),
+    buildHydraDemos=("On" if context.buildHydraDemos else "Off")))
 
 if args.dry_run:
     sys.exit(0)
@@ -1401,6 +1429,9 @@ try:
     # Build USD
     PrintStatus("Installing USD...")
     InstallUSD(context)
+
+    PrintStatus("Installing Hydra Tutorials...")
+    InstallHydraTutorials(context)
 except Exception as e:
     PrintError(str(e))
     sys.exit(1)

@@ -2,11 +2,6 @@ add_executable (simpleObject
         main.cpp
         SceneDelegate.cpp SceneDelegate.h tiny_obj_loader.h)
 
-find_package(PythonLibs)
-find_package(OpenGL)
-
-
-
 target_include_directories(simpleObject
         PUBLIC
             ${USD_INC_DIR}
@@ -30,9 +25,14 @@ target_link_libraries(
                 ${USD_LIB_DIR}/libvt.so
                 ${USD_LIB_DIR}/libpxOsd.so
                 ${USD_LIB_DIR}/libosdCPU.so
-                ${USD_LIB_DIR}/libboost_python.so # todo find library
+                ${USD_LIB_DIR}/libboost_python.so 
                 ${PYTHON_LIBRARY}
                 ${OPENGL_LIBRARIES}
         )
 
-install(FILES data/default.mtl data/default.png data/teapot.obj DESTINATION bin)
+install(FILES data/teapot/default.mtl data/teapot/default.png data/teapot/teapot.obj DESTINATION hydra-examples/bin)
+
+
+install(TARGETS simpleObject
+        RUNTIME DESTINATION hydra-examples/bin
+        )

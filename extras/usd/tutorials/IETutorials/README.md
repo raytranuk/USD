@@ -1,10 +1,10 @@
-# USD-tests
+# Hydra Tests
 
-A bunch of examples to learn USD & Hydra C++ API
+A bunch of examples to learn the Hydra C++ API. 
 
 ## Build Instructions
 
-Using the USD build script **build_usd.py** should also build the following examples.
+Using the USD build script **build_usd.py** should also build the following examples to *{USD_INSTALL_DIR}/hydra-examples/bin*
 
 ## Examples
 
@@ -16,7 +16,7 @@ The graphics equivalent of the 'Hello World' application, a window with a single
 
 ### Simple Object
 
-Display a teapot .obj file.
+Display a teapot .obj file. 
 
 ![simpleObject](images/hydra_simple_object.png)
 
