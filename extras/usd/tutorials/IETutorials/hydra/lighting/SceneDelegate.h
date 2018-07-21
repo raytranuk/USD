@@ -24,9 +24,7 @@ public:
 	pxr::GfMatrix4d GetTransform(pxr::SdfPath const &id) override;
 
 	pxr::HdMeshTopology GetMeshTopology(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarVertexNames(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarConstantNames(pxr::SdfPath const& id) override;
-	pxr::TfTokenVector GetPrimVarFacevaryingNames(pxr::SdfPath const& id) override;
+	pxr::HdPrimvarDescriptorVector GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation) override;
 
 	void UpdateCubeTransform();
 

@@ -23,7 +23,8 @@ public:
 	pxr::GfMatrix4d GetTransform(pxr::SdfPath const &id) override;
 
 	pxr::HdMeshTopology GetMeshTopology(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarVertexNames(pxr::SdfPath const &id) override;
+
+	pxr::HdPrimvarDescriptorVector GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation) override;
 
 private:
 	// per location (SdfPath) cache of dictionaries (TfToken -> VtValue) 

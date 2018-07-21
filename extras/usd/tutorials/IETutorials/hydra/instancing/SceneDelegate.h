@@ -22,9 +22,8 @@ public:
 	pxr::GfRange3d GetExtent(pxr::SdfPath const &id) override;
 	pxr::GfMatrix4d GetTransform(pxr::SdfPath const &id) override;
 
-	pxr::TfTokenVector GetPrimVarVertexNames(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarFacevaryingNames(pxr::SdfPath const& id) override;
-	pxr::TfTokenVector GetPrimVarInstanceNames(pxr::SdfPath const &id) override;
+	pxr::HdPrimvarDescriptorVector GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation) override;
+	//pxr::TfTokenVector GetPrimVarInstanceNames(pxr::SdfPath const &id) override;
 
 	void UpdateTransform();
 

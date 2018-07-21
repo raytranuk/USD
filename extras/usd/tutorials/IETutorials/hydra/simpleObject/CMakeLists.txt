@@ -18,7 +18,7 @@ target_link_libraries(
                 ${USD_LIB_DIR}/libusd.so
                 ${USD_LIB_DIR}/libsdf.so
                 ${USD_LIB_DIR}/libgarch.so
-                ${USD_LIB_DIR}/libtracelite.so
+                ${USD_LIB_DIR}/libtrace.so
                 ${USD_LIB_DIR}/libcameraUtil.so
                 ${USD_LIB_DIR}/libgf.so
                 ${USD_LIB_DIR}/libglf.so

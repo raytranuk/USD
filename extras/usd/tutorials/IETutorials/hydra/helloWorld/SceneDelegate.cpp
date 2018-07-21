@@ -1,6 +1,6 @@
 #include "SceneDelegate.h"
 
-#include "pxr/imaging/hdSt/camera.h"
+#include "pxr/imaging/hd/camera.h"
 #include "pxr/imaging/cameraUtil/conformWindow.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
@@ -54,11 +54,11 @@ void SceneDelegate::SetCamera(pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d
 void SceneDelegate::SetCamera(pxr::SdfPath const &cameraId, pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d const &projMatrix)
 {
 	_ValueCache &cache = _valueCacheMap[cameraId];
-	cache[pxr::HdStCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
-	cache[pxr::HdStCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
-	cache[pxr::HdStCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
+	cache[pxr::HdCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
+	cache[pxr::HdCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
+	cache[pxr::HdCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
 
-	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdStCamera::AllDirty);
+	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdCamera::AllDirty);
 }
 
 
@@ -71,7 +71,7 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 		return ret;
 	}
 
-	if (key == pxr::HdShaderTokens->surfaceShader)
+	if (key == pxr::HdShaderTokens->fragmentShader)
 	{
 		return pxr::VtValue();
 	}
@@ -119,12 +119,16 @@ pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 	return triangleTopology;
 }
 
-pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
+pxr::HdPrimvarDescriptorVector SceneDelegate::GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation)
 {
-	std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
+	std::cout << "[" << id.GetString() <<"][GetPrimvarDescriptors]" << std::endl;
+	pxr::HdPrimvarDescriptorVector primvarDescriptors;
 
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->points);
+	if (interpolation == pxr::HdInterpolation::HdInterpolationVertex)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->points, interpolation));
+	}
 
-	return names;
+
+	return primvarDescriptors;
 }

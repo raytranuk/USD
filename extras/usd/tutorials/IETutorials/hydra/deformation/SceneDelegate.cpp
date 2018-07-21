@@ -1,6 +1,6 @@
 #include "SceneDelegate.h"
 
-#include "pxr/imaging/hdSt/camera.h"
+#include "pxr/imaging/hd/camera.h"
 #include "pxr/imaging/hdSt/light.h"
 #include "pxr/imaging/cameraUtil/conformWindow.h"
 #include "pxr/imaging/pxOsd/tokens.h"
@@ -47,7 +47,7 @@ SceneDelegate::SceneDelegate(pxr::HdRenderIndex *parentIndex, pxr::SdfPath const
 	light1.SetTransform(transform);
 
 	auto path = pxr::SdfPath("/light1");
-	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->light, this, path);
+	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->simpleLight, this, path);
 	_ValueCache &cache = _valueCacheMap[path];
 
 	pxr::HdxShadowParams shadowParams;
@@ -56,9 +56,9 @@ SceneDelegate::SceneDelegate(pxr::HdRenderIndex *parentIndex, pxr::SdfPath const
 	shadowParams.bias = -0.001;
 	shadowParams.blur = 0.1;
 
-	cache[pxr::HdStLightTokens->params] = light1;
-	cache[pxr::HdStLightTokens->shadowParams] = shadowParams;
-	cache[pxr::HdStLightTokens->shadowCollection] = pxr::HdRprimCollection(pxr::HdTokens->geometry, pxr::HdTokens->refined);
+	cache[pxr::HdLightTokens->params] = light1;
+	cache[pxr::HdLightTokens->shadowParams] = shadowParams;
+	cache[pxr::HdLightTokens->shadowCollection] = pxr::HdRprimCollection(pxr::HdTokens->geometry, pxr::HdTokens->refined);
 }
 
 void SceneDelegate::AddRenderTask(pxr::SdfPath const &id)
@@ -101,11 +101,11 @@ void SceneDelegate::SetCamera(pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d
 void SceneDelegate::SetCamera(pxr::SdfPath const &cameraId, pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d const &projMatrix)
 {
 	_ValueCache &cache = _valueCacheMap[cameraId];
-	cache[pxr::HdStCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
-	cache[pxr::HdStCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
-	cache[pxr::HdStCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
+	cache[pxr::HdCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
+	cache[pxr::HdCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
+	cache[pxr::HdCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
 
-	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdStCamera::AllDirty);
+	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdCamera::AllDirty);
 }
 
 
@@ -118,7 +118,7 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 		return ret;
 	}
 
-	if (key == pxr::HdShaderTokens->surfaceShader)
+	if (key == pxr::HdShaderTokens->material)
 	{
 		return pxr::VtValue();
 	}
@@ -171,13 +171,27 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 	return pxr::VtValue();
 }
 
-pxr::TfTokenVector SceneDelegate::GetPrimVarConstantNames(pxr::SdfPath const& id)
+pxr::HdPrimvarDescriptorVector SceneDelegate::GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation)
 {
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->color);
-	return names;
-}
+	std::cout << "[" << id.GetString() <<"][GetPrimvarDescriptors]" << std::endl;
+	pxr::HdPrimvarDescriptorVector primvarDescriptors;
 
+	if (interpolation == pxr::HdInterpolation::HdInterpolationVertex)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->points, interpolation));
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->normals, interpolation));
+	}
+	else if (interpolation == pxr::HdInterpolationFaceVarying)
+	{
+
+	}
+	else if (interpolation == pxr::HdInterpolationConstant)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->color, interpolation));
+	}
+
+	return primvarDescriptors;
+}
 
 bool SceneDelegate::GetVisible(pxr::SdfPath const &id)
 {
@@ -231,26 +245,6 @@ pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 		return triangleTopology;
 	}
 
-}
-
-pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
-{
-	std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
-
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->points);
-	names.push_back(pxr::HdTokens->normals);
-	return names;
-}
-
-
-pxr::TfTokenVector SceneDelegate::GetPrimVarFacevaryingNames(pxr::SdfPath const& id)
-{
-	std::cout << "[" << id.GetString() <<"][GetPrimVarFacevaryingNames]" << std::endl;
-	pxr::TfTokenVector names;
-
-
-	return names;
 }
 
 void SceneDelegate::UpdateCubeTransform()

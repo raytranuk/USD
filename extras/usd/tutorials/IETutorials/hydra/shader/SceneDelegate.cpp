@@ -2,8 +2,8 @@
 
 #include <fstream>
 
-#include "pxr/imaging/hdSt/camera.h"
-#include "pxr/imaging/hd/shader.h"
+#include "pxr/imaging/hd/camera.h"
+#include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/cameraUtil/conformWindow.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
@@ -28,7 +28,7 @@ SceneDelegate::SceneDelegate(pxr::HdRenderIndex *parentIndex, pxr::SdfPath const
 	// single triangle
 	GetRenderIndex().InsertRprim(pxr::HdPrimTypeTokens->mesh, this, pxr::SdfPath("/triangle") );
 	// add a shader
-	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->shader, this, pxr::SdfPath("/shader") );
+	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->material, this, pxr::SdfPath("/shader") );
 }
 
 void
@@ -62,11 +62,11 @@ void SceneDelegate::SetCamera(pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d
 void SceneDelegate::SetCamera(pxr::SdfPath const &cameraId, pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d const &projMatrix)
 {
 	_ValueCache &cache = _valueCacheMap[cameraId];
-	cache[pxr::HdStCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
-	cache[pxr::HdStCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
-	cache[pxr::HdStCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
+	cache[pxr::HdCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
+	cache[pxr::HdCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
+	cache[pxr::HdCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
 
-	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdStCamera::AllDirty);
+	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdCamera::AllDirty);
 }
 
 
@@ -79,7 +79,7 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 		return ret;
 	}
 
-	if (id == pxr::SdfPath("/triangle") && key == pxr::HdShaderTokens->surfaceShader)
+	if (id == pxr::SdfPath("/triangle") && key == pxr::HdShaderTokens->material)
 	{
 		return pxr::VtValue(pxr::SdfPath("/shader"));
 	}
@@ -134,21 +134,21 @@ pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 	return triangleTopology;
 }
 
-pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
+pxr::HdPrimvarDescriptorVector SceneDelegate::GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation)
 {
-	std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
+	std::cout << "[" << id.GetString() <<"][GetPrimvarDescriptors]" << std::endl;
+	pxr::HdPrimvarDescriptorVector primvarDescriptors;
 
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->points);
+	if (interpolation == pxr::HdInterpolation::HdInterpolationVertex)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->points, interpolation));
+	}
+	else if (interpolation == pxr::HdInterpolationConstant)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->color, interpolation));
+	}
 
-	return names;
-}
-
-pxr::TfTokenVector SceneDelegate::GetPrimVarConstantNames(pxr::SdfPath const& id)
-{
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->color);
-	return names;
+	return primvarDescriptors;
 }
 
 std::string SceneDelegate::GetSurfaceShaderSource(pxr::SdfPath const &shaderId)
@@ -164,9 +164,9 @@ std::string SceneDelegate::GetDisplacementShaderSource(pxr::SdfPath const &shade
 	return "vec4 displacementShader(int  a, vec4 b, vec3 c, vec4 d) { return b; }";
 }
 
-pxr::VtValue SceneDelegate::GetSurfaceShaderParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName)
+pxr::VtValue SceneDelegate::GetMaterialParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName)
 {
-	std::cout << "[" << shaderId.GetString() << "." << paramName <<"][GetSurfaceShaderParamValue]" << std::endl;
+	std::cout << "[" << shaderId.GetString() << "." << paramName <<"][GetMaterialParamValue]" << std::endl;
 
 	if (paramName == pxr::TfToken("myColor"))
 	{
@@ -175,24 +175,24 @@ pxr::VtValue SceneDelegate::GetSurfaceShaderParamValue(pxr::SdfPath const &shade
 	return  pxr::VtValue();
 }
 
-pxr::HdShaderParamVector SceneDelegate::GetSurfaceShaderParams(pxr::SdfPath const &shaderId)
+pxr::HdMaterialParamVector SceneDelegate::GetMaterialParams(pxr::SdfPath const &shaderId)
 {
-	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderParams]" << std::endl;
-	pxr::HdShaderParamVector r;
-	pxr::HdShaderParam param(pxr::TfToken("myColor"),  pxr::VtValue(color) );
+	std::cout << "[" << shaderId.GetString() <<"][GetMaterialParams]" << std::endl;
+	pxr::HdMaterialParamVector r;
+	pxr::HdMaterialParam param(pxr::TfToken("myColor"),  pxr::VtValue(color) );
 	r.push_back(param);
 	return r;
 }
 
-pxr::SdfPathVector SceneDelegate::GetSurfaceShaderTextures(pxr::SdfPath const &shaderId)
-{
-	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderTextures]" << std::endl;
-	return pxr::SdfPathVector();
-}
+//pxr::SdfPathVector SceneDelegate::GetSurfaceShaderTextures(pxr::SdfPath const &shaderId)
+//{
+//	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderTextures]" << std::endl;
+//	return pxr::SdfPathVector();
+//}
 
 void SceneDelegate::UpdateColor()
 {
 	time +=  0.001f;
 	color = pxr::GfVec4f(sinf(time), sinf(time * 1.2 + 1.5), 0.0f, 1.0);
-	GetRenderIndex().GetChangeTracker().MarkSprimDirty(pxr::SdfPath("/shader"),  pxr::HdShader::AllDirty);
+	GetRenderIndex().GetChangeTracker().MarkSprimDirty(pxr::SdfPath("/shader"),  pxr::HdMaterial::AllDirty);
 }

@@ -5,7 +5,7 @@
 #include "pxr/imaging/glf/textureRegistry.h"
 #include "pxr/imaging/hd/resourceRegistry.h"
 
-#include "pxr/imaging/hdSt/camera.h"
+#include "pxr/imaging/hd/camera.h"
 #include "pxr/imaging/cameraUtil/conformWindow.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
@@ -28,11 +28,7 @@ SceneDelegate::SceneDelegate(pxr::HdRenderIndex *parentIndex, pxr::SdfPath const
 	// single quad
 	GetRenderIndex().InsertRprim(pxr::HdPrimTypeTokens->mesh, this, pxr::SdfPath("/quad") );
 	// add a shader
-	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->shader, this, pxr::SdfPath("/shader") );
-
-	GetRenderIndex().InsertBprim(pxr::HdPrimTypeTokens->texture, this, pxr::SdfPath("/texture") );
-
-
+	GetRenderIndex().InsertSprim(pxr::HdPrimTypeTokens->material, this, pxr::SdfPath("/shader") );
 }
 
 void
@@ -66,11 +62,11 @@ void SceneDelegate::SetCamera(pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d
 void SceneDelegate::SetCamera(pxr::SdfPath const &cameraId, pxr::GfMatrix4d const &viewMatrix, pxr::GfMatrix4d const &projMatrix)
 {
 	_ValueCache &cache = _valueCacheMap[cameraId];
-	cache[pxr::HdStCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
-	cache[pxr::HdStCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
-	cache[pxr::HdStCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
+	cache[pxr::HdCameraTokens->windowPolicy] = pxr::VtValue(pxr::CameraUtilFit);
+	cache[pxr::HdCameraTokens->worldToViewMatrix] = pxr::VtValue(viewMatrix);
+	cache[pxr::HdCameraTokens->projectionMatrix] = pxr::VtValue(projMatrix);
 
-	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdStCamera::AllDirty);
+	GetRenderIndex().GetChangeTracker().MarkSprimDirty(cameraId, pxr::HdCamera::AllDirty);
 }
 
 
@@ -83,7 +79,7 @@ pxr::VtValue SceneDelegate::Get(pxr::SdfPath const &id, const pxr::TfToken &key)
 		return ret;
 	}
 
-	if (id == pxr::SdfPath("/quad") && key == pxr::HdShaderTokens->surfaceShader)
+	if (id == pxr::SdfPath("/quad") && key == pxr::HdShaderTokens->material)
 	{
 		return pxr::VtValue(pxr::SdfPath("/shader"));
 	}
@@ -151,23 +147,26 @@ pxr::HdMeshTopology SceneDelegate::GetMeshTopology(pxr::SdfPath const &id)
 	return topology;
 }
 
-pxr::TfTokenVector SceneDelegate::GetPrimVarVertexNames(pxr::SdfPath const &id)
+
+pxr::HdPrimvarDescriptorVector SceneDelegate::GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation)
 {
-	std::cout << "[" << id.GetString() <<"][PrimVarVertexNames]" << std::endl;
+	std::cout << "[" << id.GetString() <<"][GetPrimvarDescriptors]" << std::endl;
+	pxr::HdPrimvarDescriptorVector primvarDescriptors;
 
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->points);
-	names.push_back(pxr::TfToken("uv"));
+	if (interpolation == pxr::HdInterpolation::HdInterpolationVertex)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->points, interpolation));
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::TfToken("uv"), interpolation));
+	}
+	else if (interpolation == pxr::HdInterpolationConstant)
+	{
+		primvarDescriptors.push_back(pxr::HdPrimvarDescriptor(pxr::HdTokens->color, interpolation));
+	}
 
-	return names;
+
+	return primvarDescriptors;
 }
 
-pxr::TfTokenVector SceneDelegate::GetPrimVarConstantNames(pxr::SdfPath const& id)
-{
-	pxr::TfTokenVector names;
-	names.push_back(pxr::HdTokens->color);
-	return names;
-}
 
 std::string SceneDelegate::GetSurfaceShaderSource(pxr::SdfPath const &shaderId)
 {
@@ -186,48 +185,50 @@ std::string SceneDelegate::GetDisplacementShaderSource(pxr::SdfPath const &shade
 	return "vec4 displacementShader(int  a, vec4 b, vec3 c, vec4 d) { return b; }";
 }
 
-pxr::VtValue SceneDelegate::GetSurfaceShaderParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName)
+pxr::VtValue SceneDelegate::GetMaterialParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName)
 {
 	std::cout << "[" << shaderId.GetString() << "." << paramName <<"][GetSurfaceShaderParamValue]" << std::endl;
 
 	return  pxr::VtValue();
 }
 
-pxr::HdShaderParamVector SceneDelegate::GetSurfaceShaderParams(pxr::SdfPath const &shaderId)
+pxr::HdMaterialParamVector SceneDelegate::GetMaterialParams(pxr::SdfPath const &shaderId)
 {
 	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderParams]" << std::endl;
 
-	pxr::HdShaderParamVector r;
-	pxr::HdShaderParam param(pxr::TfToken("textureColor"),  pxr::VtValue(pxr::GfVec4f(0.9f, 0.9f, 0.9f, 1.0)), pxr::SdfPath("/texture") );
+	pxr::HdMaterialParamVector r;
+	pxr::HdMaterialParam param(pxr::TfToken("textureColor"),  pxr::VtValue(pxr::GfVec4f(0.9f, 0.9f, 0.9f, 1.0)), pxr::SdfPath("/texture") );
 	r.push_back(param);
 	return r;
 }
 
-pxr::SdfPathVector SceneDelegate::GetSurfaceShaderTextures(pxr::SdfPath const &shaderId)
-{
-	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderTextures]" << std::endl;
-	pxr::SdfPathVector r = { pxr::SdfPath("/texture") };
-	return r;
-}
+//pxr::SdfPathVector SceneDelegate::GetSurfaceShaderTextures(pxr::SdfPath const &shaderId)
+//{
+//	std::cout << "[" << shaderId.GetString() <<"][GetSurfaceShaderTextures]" << std::endl;
+//	pxr::SdfPathVector r = { pxr::SdfPath("/texture") };
+//	return r;
+//}
 
-pxr::HdTextureResource::ID SceneDelegate::GetTextureResourceID(pxr::SdfPath const &textureId)
-{
-	std::cout << "[" << textureId.GetString() <<"][GetTextureResourceID]" << std::endl;
-	return 123425;
-}
+//pxr::HdTextureResource::ID SceneDelegate::GetTextureResourceID(pxr::SdfPath const &textureId)
+//{
+//	std::cout << "[" << textureId.GetString() <<"][GetTextureResourceID]" << std::endl;
+//	return 0;
+//}
 
 pxr::HdTextureResourceSharedPtr SceneDelegate::GetTextureResource(pxr::SdfPath const &textureId)
 {
-	std::cout << "[" << textureId.GetString() <<"][GetTextureResource]" << std::endl;
-	if (!textureHandle)
-	{
-		textureHandle = pxr::GlfTextureRegistry::GetInstance().GetTextureHandle(pxr::TfToken("default.jpg"));
-		textureHandle->AddMemoryRequest(1024 * 1024);
-		std::cout << textureHandle << std::endl;
+//	std::cout << "[" << textureId.GetString() <<"][GetTextureResource]" << std::endl;
+//	if (!textureHandle)
+//	{
+//		textureHandle = pxr::GlfTextureRegistry::GetInstance().GetTextureHandle(pxr::TfToken("default.jpg"));
+//		textureHandle->AddMemoryRequest(1024 * 1024);
+//		std::cout << textureHandle << std::endl;
+//
+//		pxr::HdSimpleTextureResource *p = new pxr::HdSimpleTextureResource(textureHandle, false /* not ptex */ );
+//		textureResource = pxr::HdTextureResourceSharedPtr(p);
+//	}
+//
+//	return textureResource;
+	return pxr::HdTextureResourceSharedPtr();
 
-		pxr::HdSimpleTextureResource *p = new pxr::HdSimpleTextureResource(textureHandle, false /* not ptex */ );
-		textureResource = pxr::HdTextureResourceSharedPtr(p);
-	}
-
-	return textureResource;
 }

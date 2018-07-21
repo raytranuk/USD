@@ -24,7 +24,7 @@ public:
 
 	pxr::HdBasisCurvesTopology GetBasisCurvesTopology(pxr::SdfPath const& id) override;
 
-	pxr::TfTokenVector GetPrimVarVertexNames(pxr::SdfPath const &id) override;
+	pxr::HdPrimvarDescriptorVector GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation) override;
 
 	void UpdateTransform();
 private:

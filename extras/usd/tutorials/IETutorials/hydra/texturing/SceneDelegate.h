@@ -23,16 +23,16 @@ public:
 	pxr::GfMatrix4d GetTransform(pxr::SdfPath const &id) override;
 
 	pxr::HdMeshTopology GetMeshTopology(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarVertexNames(pxr::SdfPath const &id) override;
-	pxr::TfTokenVector GetPrimVarConstantNames(pxr::SdfPath const& id) override;
+
+	pxr::HdPrimvarDescriptorVector GetPrimvarDescriptors(pxr::SdfPath const& id, pxr::HdInterpolation interpolation) override;
 
 	std::string GetSurfaceShaderSource(pxr::SdfPath const &shaderId) override;
 	std::string GetDisplacementShaderSource(pxr::SdfPath const &shaderId) override;
-	pxr::VtValue GetSurfaceShaderParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName) override;
-	pxr::HdShaderParamVector GetSurfaceShaderParams(pxr::SdfPath const &shaderId) override;
-	pxr::SdfPathVector GetSurfaceShaderTextures(pxr::SdfPath const &shaderId) override;
+	pxr::VtValue GetMaterialParamValue(pxr::SdfPath const &shaderId, const pxr::TfToken &paramName) override;
+	pxr::HdMaterialParamVector GetMaterialParams(pxr::SdfPath const &shaderId) override;
+	//pxr::SdfPathVector GetSurfaceShaderTextures(pxr::SdfPath const &shaderId) override;
 
-	pxr::HdTextureResource::ID GetTextureResourceID(pxr::SdfPath const &textureId) override;
+	//pxr::HdTextureResource::ID GetTextureResourceID(pxr::SdfPath const &textureId) override;
 
 	pxr::HdTextureResourceSharedPtr GetTextureResource(pxr::SdfPath const &textureId) override;
 
@@ -46,8 +46,8 @@ private:
 	pxr::SdfPath cameraPath;
 
 	std::string shaderSource;
-	pxr::GlfTextureHandleRefPtr textureHandle;
+	//pxr::GlfTextureHandleRefPtr textureHandle;
 
-	pxr::HdTextureResourceSharedPtr textureResource;
+	//pxr::HdTextureResourceSharedPtr textureResource;
 
 };
