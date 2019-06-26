@@ -24,6 +24,7 @@
 #include "pxr/usd/usdGeom/modelAPI.h"
 #include "pxr/usd/usd/schemaRegistry.h"
 #include "pxr/usd/usd/typed.h"
+#include "pxr/usd/usd/tokens.h"
 
 #include "pxr/usd/sdf/types.h"
 #include "pxr/usd/sdf/assetPath.h"
@@ -34,9 +35,14 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_REGISTRY_FUNCTION(TfType)
 {
     TfType::Define<UsdGeomModelAPI,
-        TfType::Bases< UsdModelAPI > >();
+        TfType::Bases< UsdAPISchemaBase > >();
     
 }
+
+TF_DEFINE_PRIVATE_TOKENS(
+    _schemaTokens,
+    (GeomModelAPI)
+);
 
 /* virtual */
 UsdGeomModelAPI::~UsdGeomModelAPI()
@@ -54,6 +60,20 @@ UsdGeomModelAPI::Get(const UsdStagePtr &stage, const SdfPath &path)
     return UsdGeomModelAPI(stage->GetPrimAtPath(path));
 }
 
+/*virtual*/
+bool 
+UsdGeomModelAPI::_IsAppliedAPISchema() const 
+{
+    return true;
+}
+
+/* static */
+UsdGeomModelAPI
+UsdGeomModelAPI::Apply(const UsdPrim &prim)
+{
+    return UsdAPISchemaBase::_ApplyAPISchema<UsdGeomModelAPI>(
+            prim, _schemaTokens->GeomModelAPI);
+}
 
 /* static */
 const TfType &
@@ -278,7 +298,7 @@ UsdGeomModelAPI::GetSchemaAttributeNames(bool includeInherited)
     };
     static TfTokenVector allNames =
         _ConcatenateAttributeNames(
-            UsdModelAPI::GetSchemaAttributeNames(true),
+            UsdAPISchemaBase::GetSchemaAttributeNames(true),
             localNames);
 
     if (includeInherited)

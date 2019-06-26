@@ -34,7 +34,8 @@ import sys
 #
 def _GetContextMenuItems(appController, item):
     return [JumpToEnclosingModelItem(appController, item),
-            JumpToBoundMaterialMenuItem(appController, item),
+            SelectBoundPreviewMaterialMenuItem(appController, item),
+            SelectBoundFullMaterialMenuItem(appController, item),
             SeparatorMenuItem(appController, item),
             ToggleVisibilityMenuItem(appController, item),
             VisOnlyMenuItem(appController, item),
@@ -54,8 +55,8 @@ def _GetContextMenuItems(appController, item):
 class PrimContextMenuItem(UsdviewContextMenuItem):
 
     def __init__(self, appController, item):
-        self._currentPrims = appController._currentPrims
-        self._currentFrame = appController._currentFrame
+        self._selectionDataModel = appController._dataModel.selection
+        self._currentFrame = appController._dataModel.currentFrame
         self._appController = appController
         self._item = item
 
@@ -91,7 +92,7 @@ class JumpToEnclosingModelItem(PrimContextMenuItem):
     def IsEnabled(self):
         from common import GetEnclosingModelPrim
 
-        for p in self._currentPrims:
+        for p in self._selectionDataModel.getPrims():
             if GetEnclosingModelPrim(p) is not None:
                 return True
         return False
@@ -100,34 +101,73 @@ class JumpToEnclosingModelItem(PrimContextMenuItem):
         return "Jump to Enclosing Model"
 
     def RunCommand(self):
-        self._appController.jumpToEnclosingModelSelectedPrims()
+        self._appController.selectEnclosingModel()
 
 #
-# Replace each selected prim with the Material it or its closest ancestor is
-# bound to.
+# Replace each selected prim with the "preview" Material it is bound to.
 #
-class JumpToBoundMaterialMenuItem(PrimContextMenuItem):
+class SelectBoundPreviewMaterialMenuItem(PrimContextMenuItem):
 
     def __init__(self, appController, item):
         PrimContextMenuItem.__init__(self, appController, item)
-        from common import GetClosestBoundMaterial
+        from pxr import UsdShade 
 
-        self._material = None
-        for p in self._currentPrims:
-            material, bound = GetClosestBoundMaterial(p)
-            if material is not None:
-                self._material = material
+        self._boundPreviewMaterial = None
+        self._bindingRel = None
+        for p in self._selectionDataModel.getPrims():
+            (self._boundPreviewMaterial, self._bindingRel) = \
+                UsdShade.MaterialBindingAPI(p).ComputeBoundMaterial(
+                    UsdShade.Tokens.preview)
+            if self._boundPreviewMaterial:
                 break
 
     def IsEnabled(self):
-        return self._material is not None
+        return bool(self._boundPreviewMaterial)
 
     def GetText(self):
-        return "Jump to Bound Material (%s)" % (self._material.GetName() if
-                                                self._material else
-                                                "no material bound")
+        if self._boundPreviewMaterial:
+            isPreviewBindingRel = 'preview' in self._bindingRel.SplitName()
+            return "Select Bound Preview Material (%s%s)" % (
+            self._boundPreviewMaterial.GetPrim().GetName(),
+            "" if isPreviewBindingRel else " from generic binding")
+        else:
+            return "Select Bound Preview Material (None)"
+
     def RunCommand(self):
-        self._appController.jumpToBoundMaterialSelectedPrims()
+        self._appController.selectBoundPreviewMaterial()
+
+#
+# Replace each selected prim with the "preview" Material it is bound to.
+#
+class SelectBoundFullMaterialMenuItem(PrimContextMenuItem):
+
+    def __init__(self, appController, item):
+        PrimContextMenuItem.__init__(self, appController, item)
+        from pxr import UsdShade 
+
+        self._boundFullMaterial = None
+        self._bindingRel = None
+        for p in self._selectionDataModel.getPrims():
+            (self._boundFullMaterial, self._bindingRel) = \
+                UsdShade.MaterialBindingAPI(p).ComputeBoundMaterial(
+                    UsdShade.Tokens.full)
+            if self._boundFullMaterial:
+                break
+
+    def IsEnabled(self):
+        return bool(self._boundFullMaterial)
+
+    def GetText(self):
+        if self._boundFullMaterial:
+            isFullBindingRel = 'full' in self._bindingRel.SplitName()
+            return "Select Bound Full Material (%s%s)" % (
+            self._boundFullMaterial.GetPrim().GetName(),
+            "" if isFullBindingRel else " from generic binding")
+        else:
+            return "Select Bound Full Material (None)"
+
+    def RunCommand(self):
+        self._appController.selectBoundFullMaterial()
 
 
 #
@@ -136,13 +176,13 @@ class JumpToBoundMaterialMenuItem(PrimContextMenuItem):
 class ActiveMenuItem(PrimContextMenuItem):
 
     def GetText(self):
-        if self._currentPrims[0].IsActive():
+        if self._selectionDataModel.getFocusPrim().IsActive():
             return "Deactivate"
         else:
             return "Activate"
 
     def RunCommand(self):
-        active = self._currentPrims[0].IsActive()
+        active = self._selectionDataModel.getFocusPrim().IsActive()
         if active:
             self._appController.deactivateSelectedPrims()
         else:
@@ -159,7 +199,7 @@ class ToggleVisibilityMenuItem(PrimContextMenuItem):
         from pxr import UsdGeom
         self._imageable = False
         self._isVisible = False
-        for prim in self._currentPrims:
+        for prim in self._selectionDataModel.getPrims():
             imgbl = UsdGeom.Imageable(prim)
             if imgbl:
                 self._imageable = True
@@ -187,7 +227,7 @@ class VisOnlyMenuItem(PrimContextMenuItem):
 
     def IsEnabled(self):
         from pxr import UsdGeom
-        for prim in self._currentPrims:
+        for prim in self._selectionDataModel.getPrims():
             if prim.IsA(UsdGeom.Imageable):
                 return True
         return False
@@ -205,7 +245,7 @@ class RemoveVisMenuItem(PrimContextMenuItem):
 
     def IsEnabled(self):
         from common import HasSessionVis
-        for prim in self._currentPrims:
+        for prim in self._selectionDataModel.getPrims():
             if HasSessionVis(prim):
                 return True
 
@@ -228,7 +268,8 @@ class LoadOrUnloadMenuItem(PrimContextMenuItem):
         from common import GetPrimsLoadability
         # Use the descendent-pruned selection set to avoid redundant
         # traversal of the stage to answer isLoaded...
-        self._loadable, self._loaded = GetPrimsLoadability(self._appController._prunedCurrentPrims)
+        self._loadable, self._loaded = GetPrimsLoadability(
+            self._selectionDataModel.getLCDPrims())
 
     def IsEnabled(self):
         return self._loadable
@@ -250,12 +291,13 @@ class LoadOrUnloadMenuItem(PrimContextMenuItem):
 class CopyPrimPathMenuItem(PrimContextMenuItem):
 
     def GetText(self):
-        if len(self._currentPrims) > 1:
+        if len(self._selectionDataModel.getPrims()) > 1:
             return "Copy Prim Paths"
         return "Copy Prim Path"
 
     def RunCommand(self):
-        pathlist = [str(p.GetPath()) for p in self._currentPrims]
+        pathlist = [str(p.GetPath())
+            for p in self._selectionDataModel.getPrims()]
         pathStrings = '\n'.join(pathlist)
 
         cb = QtWidgets.QApplication.clipboard()
@@ -272,8 +314,11 @@ class CopyModelPathMenuItem(PrimContextMenuItem):
         PrimContextMenuItem.__init__(self, appController, item)
         from common import GetEnclosingModelPrim
 
-        self._modelPrim = GetEnclosingModelPrim(self._currentPrims[0]) if \
-            len(self._currentPrims) == 1 else None
+        if len(self._selectionDataModel.getPrims()) == 1:
+            self._modelPrim = GetEnclosingModelPrim(
+                self._selectionDataModel.getFocusPrim())
+        else:
+            self._modelPrim = None
 
     def IsEnabled(self):
         return self._modelPrim
@@ -301,13 +346,13 @@ class IsolateCopyPrimMenuItem(PrimContextMenuItem):
         return "Isolate Copy of Prim..."
 
     def RunCommand(self):
-        inFile = self._currentPrims[0].GetScene().GetUsdFile()
+        focusPrim = self._selectionDataModel.getFocusPrim()
 
-        guessOutFile = os.getcwd() + "/" + self._currentPrims[0].GetName() + "_copy.usd"
+        inFile = focusPrim.GetScene().GetUsdFile()
+
+        guessOutFile = os.getcwd() + "/" + focusPrim.GetName() + "_copy.usd"
         (outFile, _) = QtWidgets.QFileDialog.getSaveFileName(None,
-                                                         "Specify the Usd file to create",
-                                                         guessOutFile,
-                                                         'Usd files (*.usd)')
+            "Specify the Usd file to create", guessOutFile, 'Usd files (*.usd)')
         if (outFile.rsplit('.')[-1] != 'usd'):
             outFile += '.usd'
 
@@ -320,13 +365,16 @@ class IsolateCopyPrimMenuItem(PrimContextMenuItem):
 
         os.system( 'usdcopy -inUsd ' + inFile +
                 ' -outUsd ' + outFile + ' ' +
-                ' -sourcePath ' + self._currentPrims[0].GetPath() + '; ' +
+                ' -sourcePath ' + focusPrim.GetPath() + '; ' +
                 'usdview ' + outFile + ' &')
 
         sys.stdout.write( "Done!\n" )
 
     def IsEnabled(self):
-        return len(self._currentPrims) == 1 and self._currentPrims[0].GetActive()
+        numSelectedPrims = len(self._selectionDataModel.getPrims())
+        focusPrimActive = self._selectionDataModel.getFocusPrim().GetActive()
+
+        return numSelectedPrims == 1 and focusPrimActive
 
 
 #
@@ -339,9 +387,9 @@ class IsolateAssetMenuItem(PrimContextMenuItem):
         PrimContextMenuItem.__init__(self, appController, item)
 
         self._assetName = None
-        if len(self._currentPrims) == 1:
+        if len(self._selectionDataModel.getPrims()) == 1:
             from pxr import Usd
-            model = Usd.ModelAPI(self._currentPrims[0])
+            model = Usd.ModelAPI(self._selectionDataModel.getFocusPrim())
             name = model.GetAssetName()
             identifier = model.GetAssetIdentifier()
             if name and identifier:

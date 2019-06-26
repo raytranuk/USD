@@ -24,8 +24,98 @@
 from qt import QtCore, QtGui, QtWidgets
 import os, time, sys, platform
 from pxr import Tf, Sdf, Kind, Usd, UsdGeom, UsdShade
-from customAttributes import CustomAttribute, RelationshipAttribute
+from customAttributes import CustomAttribute
 from constantGroup import ConstantGroup
+
+DEBUG_CLIPPING = "USDVIEWQ_DEBUG_CLIPPING"
+
+class Complexities(ConstantGroup):
+    """The available complexity settings for Usdview."""
+
+    class _Complexity(object):
+        """Class which represents a level of mesh refinement complexity. Each level
+        has a string identifier, a display name, and a float complexity value.
+        """
+
+        def __init__(self, compId, name, value):
+            self._id = compId
+            self._name = name
+            self._value = value
+
+        @property
+        def id(self):
+            return self._id
+
+        @property
+        def name(self):
+            return self._name
+
+        @property
+        def value(self):
+            return self._value
+
+    LOW       = _Complexity("low",      "Low",       1.0)
+    MEDIUM    = _Complexity("medium",   "Medium",    1.1)
+    HIGH      = _Complexity("high",     "High",      1.2)
+    VERY_HIGH = _Complexity("veryhigh", "Very High", 1.3)
+
+    _ordered = (LOW, MEDIUM, HIGH, VERY_HIGH)
+
+    @classmethod
+    def ordered(cls):
+        """Get an tuple of all complexity levels in order."""
+        return Complexities._ordered
+
+    @classmethod
+    def fromId(cls, compId):
+        """Get a complexity from its identifier."""
+        matches = [comp for comp in Complexities if comp.id == compId]
+        if len(matches) == 0:
+            raise ValueError("No complexity with id '{}'".format(compId))
+        return matches[0]
+
+    @classmethod
+    def fromName(cls, name):
+        """Get a complexity from its display name."""
+        matches = [comp for comp in Complexities if comp.name == name]
+        if len(matches) == 0:
+            raise ValueError("No complexity with name '{}'".format(name))
+        return matches[0]
+
+    @classmethod
+    def next(cls, comp):
+        """Get the next highest level of complexity. If already at the highest
+        level, return it.
+        """
+        if comp not in Complexities:
+            raise ValueError("Invalid complexity: {}".format(comp))
+        nextIndex = min(
+            len(Complexities._ordered) - 1,
+            Complexities._ordered.index(comp) + 1)
+        return Complexities._ordered[nextIndex]
+
+    @classmethod
+    def prev(cls, comp):
+        """Get the next lowest level of complexity. If already at the lowest
+        level, return it.
+        """
+        if comp not in Complexities:
+            raise ValueError("Invalid complexity: {}".format(comp))
+        prevIndex = max(0, Complexities._ordered.index(comp) - 1)
+        return Complexities._ordered[prevIndex]
+
+class ClearColors(ConstantGroup):
+    """Names of available background colors."""
+    BLACK = "Black"
+    DARK_GREY = "Grey (Dark)"
+    LIGHT_GREY = "Grey (Light)"
+    WHITE = "White"
+
+class HighlightColors(ConstantGroup):
+    """Names of available highlight colors for selected objects."""
+    WHITE = "White"
+    YELLOW = "Yellow"
+    CYAN = "Cyan"
 
 class UIBaseColors(ConstantGroup):
     RED = QtGui.QBrush(QtGui.QColor(230, 132, 131))
@@ -135,6 +225,12 @@ class CameraMaskModes(ConstantGroup):
     PARTIAL = "partial"
     FULL = "full"
 
+class IncludedPurposes(ConstantGroup):
+    DEFAULT = UsdGeom.Tokens.default_
+    PROXY = UsdGeom.Tokens.proxy
+    GUIDE = UsdGeom.Tokens.guide
+    RENDER = UsdGeom.Tokens.render
+
 def _PropTreeWidgetGetRole(tw):
     return tw.data(PropertyViewIndex.TYPE, QtCore.Qt.ItemDataRole.WhatsThisRole)
 
@@ -163,8 +259,8 @@ def PrintWarning(title, description):
     print >> msg, "------------------------------------------------------------"
 
 def GetShortString(prop, frame):
-    if isinstance(prop, RelationshipAttribute):
-        val = ", ".join(str(p) for p in prop.Get(frame))
+    if isinstance(prop, Usd.Relationship):
+        val = ", ".join(str(p) for p in prop.GetTargets())
     elif isinstance(prop, (Usd.Attribute, CustomAttribute)):
         val = prop.Get(frame)
     elif isinstance(prop, Sdf.AttributeSpec):
@@ -203,19 +299,15 @@ def GetShortString(prop, frame):
 # Return attribute status at a certian frame (is it using the default, or the
 # fallback? Is it authored at this frame? etc.
 def GetAttributeStatus(attribute, frame):
-    if not isinstance(frame, Usd.TimeCode):
-        frame = Usd.TimeCode(frame)
 
     return attribute.GetResolveInfo(frame).GetSource()
 
 # Return a Font corresponding to certain attribute properties.
 # Currently this only applies italicization on interpolated time samples.
 def GetAttributeTextFont(attribute, frame):
-    if isinstance(attribute, CustomAttribute):
+    # Early-out for CustomAttributes and Relationships
+    if not isinstance(attribute, Usd.Attribute):
         return None
-
-    if not isinstance(frame, Usd.TimeCode):
-        frame = Usd.TimeCode(frame)
 
     frameVal = frame.GetValue()
     bracketing = attribute.GetBracketingTimeSamples(frameVal)
@@ -230,8 +322,8 @@ def GetAttributeTextFont(attribute, frame):
 # Helper function that takes attribute status and returns the display color
 def GetAttributeColor(attribute, frame, hasValue=None, hasAuthoredValue=None,
                       valueIsDefault=None):
-
-    if isinstance(attribute, CustomAttribute):
+    # Early-out for CustomAttributes and Relationships
+    if not isinstance(attribute, Usd.Attribute):
         return UIBaseColors.RED.color()
 
     statusToColor = {Usd.ResolveInfoSourceFallback   : UIPropertyValueSourceColors.FALLBACK,
@@ -389,25 +481,6 @@ def GetEnclosingModelPrim(prim):
 
     return prim
 
-# This should be codified in UsdShadeMaterial API
-def GetClosestBoundMaterial(prim):
-    """If 'prim' or any of its ancestors are bound to a Material, return the
-    *closest in namespace* bound Material prim, as well as the prim on which the
-    binding was found.  If none of 'prim's ancestors has a binding, return
-    (None, None)"""
-    if not prim:
-        return (None, None)
-    # XXX We should not need to guard against pseudoRoot.  Remove when
-    # bug/122473 is addressed
-    psr = prim.GetStage().GetPseudoRoot()
-    while prim and prim != psr:
-        material = UsdShade.Material.GetBoundMaterial(prim)
-        if material:
-            return (material.GetPrim(), prim)
-        prim = prim.GetParent()
-
-    return (None, None)
-
 def GetPrimLoadability(prim):
     """Return a tuple of (isLoadable, isLoaded) for 'prim', according to
     the following rules:
@@ -484,14 +557,11 @@ def GetAssetCreationTime(primStack, assetIdentifier):
         definingFile = primStack[-1].layer.realPath
         print "Warning: Could not find expected asset-defining layer for %s" %\
             assetIdentifier
-    try:
-        from pixar import UsdviewPlug
-        return UsdviewPlug.GetAssetCreationTime(definingFile, assetIdentifier)
-    except:
-        stat_info = os.stat(definingFile)
-        return (definingFile.split('/')[-1],
-                time.ctime(stat_info.st_ctime),
-                GetFileOwner(definingFile))
+
+    stat_info = os.stat(definingFile)
+    return (definingFile.split('/')[-1],
+            time.ctime(stat_info.st_ctime),
+            GetFileOwner(definingFile))
 
 
 def DumpMallocTags(stage, contextStr):
@@ -532,6 +602,19 @@ def GetInstanceIdForIndex(prim, instanceIndex, time):
         return None
     return ids[instanceIndex]
 
+def GetInstanceIndicesForIds(prim, instanceIds, time):
+    '''Attempt to find the instance indices of a list of authored instance IDs
+    for prim 'prim' at time 'time'. If the prim is not a PointInstancer or does
+    not have authored IDs, returns None. If any ID from 'instanceIds' does not
+    exist at the given time, its index is not added to the list (because it does
+    not have an index).'''
+    ids = UsdGeom.PointInstancer(prim).GetIdsAttr().Get(time)
+    if ids:
+        return [instanceIndex for instanceIndex, instanceId in enumerate(ids)
+            if instanceId in instanceIds]
+    else:
+        return None
+
 def Drange(start, stop, step):
     """Like builtin range() but allows decimals and is a closed interval
         that is, it's inclusive of stop"""
@@ -549,3 +632,8 @@ class PrimNotFoundException(Exception):
         super(PrimNotFoundException, self).__init__(
             "Prim not found at path in stage: %s" % str(path))
 
+class PropertyNotFoundException(Exception):
+    """Raised when a property does not exist at a valid path."""
+    def __init__(self, path):
+        super(PropertyNotFoundException, self).__init__(
+            "Property not found at path in stage: %s" % str(path))

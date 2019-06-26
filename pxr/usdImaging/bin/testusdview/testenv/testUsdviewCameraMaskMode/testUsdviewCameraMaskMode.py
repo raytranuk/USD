@@ -23,16 +23,22 @@
 # language governing permissions and limitations under the Apache License.
 #
 
+from pxr.Usdviewq.qt import QtWidgets
+
 # Remove any unwanted visuals from the view.
 def _modifySettings(appController):
-    appController.showBBoxes = False
-    appController.showHUD = False
+    appController._dataModel.viewSettings.showBBoxes = False
+    appController._dataModel.viewSettings.showHUD = False
 
 # Set the mask mode and refresh the view.
 def _setCameraMaskModeAction(appController, action, outline=False):
     action.setChecked(True)
-    appController._ui.actionCameraMask_Outline.setChecked(outline)
     appController._updateCameraMaskMenu()
+
+    appController._ui.actionCameraMask_Outline.setChecked(outline)
+    appController._updateCameraMaskOutlineMenu()
+
+    QtWidgets.QApplication.processEvents()
 
 # Take a shot of the viewport and save it to a file.
 def _takeShot(appController, fileName):

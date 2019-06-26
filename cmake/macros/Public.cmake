@@ -100,13 +100,13 @@ function(pxr_python_bin BIN_NAME)
     endif()
 
     # Add the target.
-    add_custom_target(${BIN_NAME}
+    add_custom_target(${BIN_NAME}_script
         DEPENDS ${outputs} ${pb_DEPENDENCIES}
     )
-    add_dependencies(python ${BIN_NAME})
+    add_dependencies(python ${BIN_NAME}_script)
 
     _get_folder("" folder)
-    set_target_properties(${BIN_NAME}
+    set_target_properties(${BIN_NAME}_script
         PROPERTIES
             FOLDER "${folder}"
     )
@@ -560,7 +560,7 @@ endfunction() # pxr_install_test_dir
 function(pxr_register_test TEST_NAME)
     if (PXR_BUILD_TESTS)
         cmake_parse_arguments(bt
-            "PYTHON;REQUIRES_SHARED_LIBS;REQUIRES_PYTHON_MODULES" 
+            "RUN_SERIAL;PYTHON;REQUIRES_SHARED_LIBS;REQUIRES_PYTHON_MODULES" 
             "CUSTOM_PYTHON;COMMAND;STDOUT_REDIRECT;STDERR_REDIRECT;DIFF_COMPARE;POST_COMMAND;POST_COMMAND_STDOUT_REDIRECT;POST_COMMAND_STDERR_REDIRECT;PRE_COMMAND;PRE_COMMAND_STDOUT_REDIRECT;PRE_COMMAND_STDERR_REDIRECT;FILES_EXIST;FILES_DONT_EXIST;CLEAN_OUTPUT;EXPECTED_RETURN_CODE;TESTENV"
             "ENV;PRE_PATH;POST_PATH"
             ${ARGN}
@@ -706,6 +706,12 @@ function(pxr_register_test TEST_NAME)
             COMMAND ${PYTHON_EXECUTABLE} ${testWrapperCmd}
                     "--env-var=PYTHONPATH=${_testPythonPath}" ${testCmd}
         )
+
+        # But in some cases, we need to pass cmake properties directly to cmake
+        # run_test, rather than configuring the environment
+        if (bt_RUN_SERIAL)
+            set_tests_properties(${TEST_NAME} PROPERTIES RUN_SERIAL TRUE)
+        endif()
     endif()
 endfunction() # pxr_register_test
 

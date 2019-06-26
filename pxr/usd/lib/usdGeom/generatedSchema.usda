@@ -1,18 +1,22 @@
 #usda 1.0
 (
     "WARNING: THIS FILE IS GENERATED.  DO NOT EDIT."
+    customLayerData = {
+        string[] appliedAPISchemas = ["GeomModelAPI", "MotionAPI"]
+        string[] multipleApplyAPISchemas = []
+    }
 )
 
 class "Imageable" (
-    doc = '''Base class for all prims that may require rendering or 
+    doc = """Base class for all prims that may require rendering or 
     visualization of some sort. The primary attributes of Imageable 
     are visibility and purpose, which each provide instructions for
     what geometry should be included for processing by rendering and other
     computations.
-    
-    Imageable also introduces the concept (and API) of geometric
-    "primitive variables", as UsdGeomPrimvar, which interpolate across a 
-    primitive and can override shader inputs.'''
+
+    <Deprecated> Imageable also provides API for accessing primvars, which
+    have been moved to the UsdGeomPrimvarsAPI schema.  This API is planned
+    to be removed, UsdGeomPrimvarsAPI should be used directly instead."""
 )
 {
     rel proxyPrim (
@@ -84,6 +88,14 @@ class "Imageable" (
         deactivating geometry prims, invisible geometry is still 
         available for inspection, for positioning, for defining volumes, etc.'''
     )
+}
+
+class "PrimvarsAPI" (
+    doc = """UsdGeomPrimvarsAPI encodes geometric \"primitive variables\",
+    as UsdGeomPrimvar, which interpolate across a primitive's topology,
+    can override shader inputs, and inherit down namespace."""
+)
+{
 }
 
 class "Xformable" (
@@ -171,7 +183,7 @@ class "Xformable" (
     float3 xformOp:rotateXYZ = (30, 60, 90)
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
-    uniform token xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateXYZ\", \"xformOp:scale\" ]
+    uniform token[] xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateXYZ\", \"xformOp:scale\" ]
     \\endcode
 
     The attributes appear in the dictionary order in which USD, by default,
@@ -195,7 +207,7 @@ class "Xformable" (
     float xformOp:rotateZ = 90
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
-    uniform token xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateZ\", \"xformOp:rotateY\", \"xformOp:rotateX\", \"xformOp:scale\" ]
+    uniform token[] xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateZ\", \"xformOp:rotateY\", \"xformOp:rotateX\", \"xformOp:scale\" ]
     \\endcode
     
     Again, note that although we are encoding an XYZ rotation, the three
@@ -209,7 +221,7 @@ class "Xformable" (
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
     double3 xformOp:translate:scalePivot
-    uniform token xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateXYZ\", \"xformOp:translate:scalePivot\", \"xformOp:scale\" ]
+    uniform token[] xformOpOrder = [ \"xformOp:translate\", \"xformOp:rotateXYZ\", \"xformOp:translate:scalePivot\", \"xformOp:scale\" ]
     \\endcode
 
     <b>Paired \"Inverted\" Ops</b>
@@ -710,7 +722,7 @@ class "Gprim" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -843,7 +855,7 @@ class Cube "Cube" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -982,7 +994,7 @@ class Sphere "Sphere" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -1132,7 +1144,7 @@ class Cylinder "Cylinder" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -1281,7 +1293,7 @@ class Capsule "Capsule" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -1432,7 +1444,7 @@ class Cone "Cone" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -1591,7 +1603,7 @@ class "PointBased" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -1839,7 +1851,7 @@ class Mesh "Mesh" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -2139,7 +2151,7 @@ class NurbsPatch "NurbsPatch" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -2399,7 +2411,7 @@ class "Curves" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -2690,7 +2702,7 @@ class BasisCurves "BasisCurves" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -2913,7 +2925,7 @@ class NurbsCurves "NurbsCurves" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -3108,7 +3120,7 @@ class Points "Points" (
     float[] primvars:displayOpacity (
         doc = """Companion to displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     rel proxyPrim (
@@ -3290,6 +3302,11 @@ class PointInstancer "PointInstancer" (
     prim itself (or the UsdGeomImageable::ComputeLocalToWorldTransform() of the 
     PointInstancer to put the instance directly into world space)
 
+    If neither *velocities* nor *angularVelocities* are authored, we fallback to
+    standard position and orientation computation logic (using linear
+    interpolation between timeSamples) as described by
+    .
+
     \\anchor UsdGeom_PITimeScaling
     <b>Scaling Velocities for Interpolation</b>
     
@@ -3298,11 +3315,38 @@ class PointInstancer "PointInstancer" (
     ( 1.0 / UsdStage::GetTimeCodesPerSecond() ), because velocities are recorded
     in units/second, while we are interpolating in UsdTimeCode ordinates.
     
+    Additionally, if *motion:velocityScale* is authored or inherited (see
+    UsdGeomMotionAPI::ComputeVelocityScale()), it is used to scale both the
+    velocity and angular velocity by a constant value during computation. The
+    *motion:velocityScale* attribute is encoded by UsdGeomMotionAPI.
+
     We provide both high and low-level API's for dealing with the
     transformation as a matrix, both will compute the instance matrices using
     multiple threads; the low-level API allows the client to cache unvarying
     inputs so that they need not be read duplicately when computing over
     time.
+
+    See also .
+    
+    Primvars on PointInstancer
+    
+    \"Primvars\" authored on a PointInstancer prim should
+    always be applied to each instance with constant interpolation at
+    the root of the instance.  When you are authoring primvars on a 
+    PointInstancer, think about it as if you were authoring them on a 
+    point-cloud (e.g. a UsdGeomPoints gprim).  The same 
+    <A HREF=\"http://renderman.pixar.com/resources/current/rps/appnote.22.html#classSpecifiers\">interpolation rules for points</A> apply here, substituting
+    \"instance\" for \"point\".
+    
+    In other words, the (constant) value extracted for each instance
+    from the authored primvar value depends on the authored interpolation
+    and elementSize of the primvar, as follows:
+    - <b>constant</b> or <b>uniform</b> : the entire authored value of the
+    primvar should be applied exactly to each instance.
+    - <b>varying</b>, <b>vertex</b>, or <b>faceVarying</b>: the first
+    elementSize elements of the authored primvar array should be assigned to
+    instance zero, the second elementSize elements should be assigned to
+    instance one, and so forth.
 
     
     Masking Instances: \"Deactivating\" and Invising
@@ -3397,26 +3441,7 @@ class PointInstancer "PointInstancer" (
     18     }
     19 }
     \\endcode
-    
-    Primvars on PointInstancer
-    
-    \"Primvars\" authored on a PointInstancer prim should
-    always be applied to each instance with constant interpolation at
-    the root of the instance.  When you are authoring primvars on a 
-    PointInstancer, think about it as if you were authoring them on a 
-    point-cloud (e.g. a UsdGeomPoints gprim).  The same 
-    <A HREF=\"http://renderman.pixar.com/resources/current/rps/appnote.22.html#classSpecifiers\">interpolation rules for points</A> apply here, substituting
-    \"instance\" for \"point\".
-    
-    In other words, the (constant) value extracted for each instance
-    from the authored primvar value depends on the authored interpolation
-    and elementSize of the primvar, as follows:
-    - <b>constant</b> or <b>uniform</b> : the entire authored value of the
-    primvar should be applied exactly to each instance.
-    - <b>varying</b>, <b>vertex</b>, or <b>faceVarying</b>: the first
-    elementSize elements of the authored primvar array should be assigned to
-    instance zero, the second elementSize elements should be assigned to
-    instance one, and so forth."""
+    """
 )
 {
     vector3f[] angularVelocities (
@@ -3804,11 +3829,8 @@ class "GeomModelAPI" (
                    Locate each quad so that it bisects the model extents.
     - box   - Generate a quad normal to each basis direction and negative.
                    Locate each quad on a face of the model extents, facing out.
-    - fromTexture - Generate a quad for each supplied texture by
-                         transforming the range from (-1,-1) to (1,1) by the
-                         inverse of the worldToScreenPos transform, pulled
-                         from texture metadata. The resulting positions are
-                         interpreted as being in model space.
+    - fromTexture - Generate a quad for each supplied texture from
+                         attributes stored in that texture's metadata.
 
     For cross and box mode, the extents are calculated for purposes
     default, proxy, and render, at their earliest authored time.
@@ -3822,9 +3844,16 @@ class "GeomModelAPI" (
     model:drawModeColor.
 
     For fromTexture mode, only card faces with valid textures assigned
-    are drawn.
+    are drawn. The geometry is generated by pulling the worldtoscreen
+    attribute out of texture metadata.  This is expected to be a 4x4 matrix
+    mapping the model-space position of the card quad to the clip-space quad
+    with corners (-1,-1,0) and (1,1,0).  The card vertices are generated by
+    transforming the clip-space corners by the inverse of worldtoscreen.
+    Textures are mapped so that (s) and (t) map to (+x) and (+y) in clip space.
+    If the metadata cannot be read in the right format, or the matrix can't
+    be inverted, the card face is not drawn.
 
-    All card faces are drawn and textured as double-sided.
+    All card faces are drawn and textured as single-sided.
 
     \\todo CreatePayload() """
 )

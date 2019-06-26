@@ -23,12 +23,15 @@
 //
 #include "pxr/usdImaging/usdImaging/sphereLightAdapter.h"
 #include "pxr/usdImaging/usdImaging/delegate.h"
+#include "pxr/usdImaging/usdImaging/indexProxy.h"
 #include "pxr/usdImaging/usdImaging/tokens.h"
 
 #include "pxr/imaging/hd/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+
+bool _IsEnabledSceneLights();
 
 TF_REGISTRY_FUNCTION(TfType)
 {
@@ -45,7 +48,8 @@ bool
 UsdImagingSphereLightAdapter::IsSupported(
         UsdImagingIndexProxy const* index) const
 {
-    return index->IsSprimTypeSupported(HdPrimTypeTokens->sphereLight);
+    return _IsEnabledSceneLights() &&
+          index->IsSprimTypeSupported(HdPrimTypeTokens->sphereLight);
 }
 
 SdfPath

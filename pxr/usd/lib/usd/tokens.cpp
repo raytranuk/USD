@@ -26,6 +26,8 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 UsdTokensType::UsdTokensType() :
+    apiSchemas("apiSchemas", TfToken::Immortal),
+    apiSchemaType("apiSchemaType", TfToken::Immortal),
     clipActive("clipActive", TfToken::Immortal),
     clipAssetPaths("clipAssetPaths", TfToken::Immortal),
     clipManifestAssetPath("clipManifestAssetPath", TfToken::Immortal),
@@ -43,7 +45,13 @@ UsdTokensType::UsdTokensType() :
     expandPrimsAndProperties("expandPrimsAndProperties", TfToken::Immortal),
     expansionRule("expansionRule", TfToken::Immortal),
     explicitOnly("explicitOnly", TfToken::Immortal),
+    isPrivateApply("isPrivateApply", TfToken::Immortal),
+    multipleApply("multipleApply", TfToken::Immortal),
+    nonApplied("nonApplied", TfToken::Immortal),
+    singleApply("singleApply", TfToken::Immortal),
     allTokens({
+        apiSchemas,
+        apiSchemaType,
         clipActive,
         clipAssetPaths,
         clipManifestAssetPath,
@@ -60,7 +68,11 @@ UsdTokensType::UsdTokensType() :
         expandPrims,
         expandPrimsAndProperties,
         expansionRule,
-        explicitOnly
+        explicitOnly,
+        isPrivateApply,
+        multipleApply,
+        nonApplied,
+        singleApply
     })
 {
 }

@@ -53,8 +53,6 @@ _BuildArray(T values[], int numValues)
 class Hdx_UnitTestDelegate : public HdSceneDelegate
 {
 public:
-    enum Interpolation { VERTEX, UNIFORM, CONSTANT, FACEVARYING, VARYING };
-
     Hdx_UnitTestDelegate(HdRenderIndex *renderIndex);
 
     void SetRefineLevel(int level);
@@ -95,12 +93,12 @@ public:
                                 VtVec4fArray const &rotate,
                                 VtVec3fArray const &translate);
 
-    /// Shader
-    void AddShader(SdfPath const &id,
+    /// Material
+    void AddMaterial(SdfPath const &id,
                    std::string const &sourceSurface,
                    std::string const &sourceDisplacement,
-                   HdShaderParamVector const &params);
-    void BindShader(SdfPath const &rprimId, SdfPath const &shaderId);
+                   HdMaterialParamVector const &params);
+    void BindMaterial(SdfPath const &rprimId, SdfPath const &materialId);
 
     // prims    
     void AddMesh(SdfPath const &id,
@@ -121,7 +119,7 @@ public:
                  VtIntArray const &verts,
                  PxOsdSubdivTags const &subdivTags,
                  VtValue const &color,
-                 Interpolation colorInterpolation,
+                 HdInterpolation colorInterpolation,
                  bool guide=false,
                  SdfPath const &instancerId=SdfPath(),
                  TfToken const &scheme=PxOsdOpenSubdivTokens->catmark,
@@ -132,7 +130,7 @@ public:
                  SdfPath const &instancerId=SdfPath(),
                  TfToken const &scheme=PxOsdOpenSubdivTokens->catmark,
                  VtValue const &color = VtValue(GfVec4f(1,1,1,1)),
-                 Interpolation colorInterpolation = CONSTANT);
+                 HdInterpolation colorInterpolation = HdInterpolationConstant);
 
     void AddGrid(SdfPath const &id, GfMatrix4d const &transform,
                  bool guide=false, SdfPath const &instancerId=SdfPath());
@@ -151,11 +149,9 @@ public:
     virtual bool GetVisible(SdfPath const& id);
     virtual HdMeshTopology GetMeshTopology(SdfPath const& id);
     virtual VtValue Get(SdfPath const& id, TfToken const& key);
-    virtual TfTokenVector GetPrimVarVertexNames(SdfPath const& id);
-    virtual TfTokenVector GetPrimVarConstantNames(SdfPath const& id);
-    virtual TfTokenVector GetPrimVarInstanceNames(SdfPath const &id);
-    virtual TfTokenVector GetPrimVarUniformNames(SdfPath const& id);
-    virtual TfTokenVector GetPrimVarFacevaryingNames(SdfPath const& id);
+    virtual HdPrimvarDescriptorVector
+        GetPrimvarDescriptors(SdfPath const& id, 
+                              HdInterpolation interpolation) override;
     virtual VtIntArray GetInstanceIndices(SdfPath const& instancerId,
                                           SdfPath const& prototypeId);
 
@@ -167,9 +163,9 @@ public:
 
     virtual std::string GetSurfaceShaderSource(SdfPath const &shaderId);
     virtual std::string GetDisplacementShaderSource(SdfPath const &shaderId);
-    virtual HdShaderParamVector GetSurfaceShaderParams(SdfPath const &shaderId);
-    virtual VtValue GetSurfaceShaderParamValue(SdfPath const &shaderId,
-                                               TfToken const &paramName);
+    virtual HdMaterialParamVector GetMaterialParams(SdfPath const &shaderId);
+    virtual VtValue GetMaterialParamValue(SdfPath const &shaderId,
+                                          TfToken const &paramName);
     virtual HdTextureResource::ID GetTextureResourceID(SdfPath const& textureId);
     virtual HdTextureResourceSharedPtr GetTextureResource(SdfPath const& textureId);
 
@@ -184,7 +180,7 @@ private:
               VtIntArray const &verts,
               PxOsdSubdivTags const &subdivTags,
               VtValue const &color,
-              Interpolation colorInterpolation,
+              HdInterpolation colorInterpolation,
               bool guide,
               bool doubleSided) :
             scheme(scheme), orientation(orientation),
@@ -202,7 +198,7 @@ private:
         VtIntArray verts;
         PxOsdSubdivTags subdivTags;
         VtValue color;
-        Interpolation colorInterpolation;
+        HdInterpolation colorInterpolation;
         bool guide;
         bool doubleSided;
         TfToken reprName;
@@ -225,11 +221,11 @@ private:
 
         std::vector<SdfPath> prototypes;
     };
-    struct _Shader {
-        _Shader() { }
-        _Shader(std::string const &srcSurface,
-                std::string const &srcDisplacement, 
-                HdShaderParamVector const &pms)
+    struct _Material {
+        _Material() { }
+        _Material(std::string const &srcSurface,
+                  std::string const &srcDisplacement, 
+                  HdMaterialParamVector const &pms)
             : sourceSurface(srcSurface)
             , sourceDisplacement(srcDisplacement)
             , params(pms) {
@@ -237,19 +233,19 @@ private:
 
         std::string sourceSurface;
         std::string sourceDisplacement;
-        HdShaderParamVector params;
+        HdMaterialParamVector params;
     };
     struct _DrawTarget {
     };
     std::map<SdfPath, _Mesh> _meshes;
     std::map<SdfPath, _Instancer> _instancers;
-    std::map<SdfPath, _Shader> _shaders;
+    std::map<SdfPath, _Material> _materials;
     std::map<SdfPath, int> _refineLevels;
     std::map<SdfPath, _DrawTarget> _drawTargets;
     int _refineLevel;
 
     typedef std::map<SdfPath, SdfPath> SdfPathMap;
-    SdfPathMap _shaderBindings;
+    SdfPathMap _materialBindings;
 
     typedef TfHashMap<TfToken, VtValue, TfToken::HashFunctor> _ValueCache;
     typedef TfHashMap<SdfPath, _ValueCache, SdfPath::Hash> _ValueCacheMap;

@@ -5,14 +5,16 @@ pxr_shared_library(${PXR_PACKAGE}
         plug
         gf
         tf
-        tracelite
+        trace
         vt
         ar
         sdf
         usd
+        usdHydra
         usdImaging
         usdImagingGL
         usdShade
+        usdSkel
         usdGeom
         usdLux
         usdRi

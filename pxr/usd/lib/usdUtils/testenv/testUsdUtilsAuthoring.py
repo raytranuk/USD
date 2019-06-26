@@ -61,6 +61,116 @@ class TestUsdUtilsAuthoring(unittest.TestCase):
             (cpyNoSublayers.pseudoRoot.GetInfo(Sdf.Layer.ColorConfigurationKey), 
              cpyNoSublayers.pseudoRoot.GetInfo(Sdf.Layer.ColorManagementSystemKey)))
 
+    def test_ComputeCollectionIncludesAndExcludes(self):
+        stage = Usd.Stage.Open("collections.usda")
+        self.assertTrue(stage)
+
+        allCarPaths = [
+            Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarA'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarB'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarC'),
+            Sdf.Path('/World/City_set/Misc_grp/CarD')
+            ]
+
+        # With default options.
+        expectedAllCarIncludes = [
+            Sdf.Path('/World/City_set/Vehicles_grp'),
+            Sdf.Path('/World/City_set/Misc_grp/CarD')
+            ]
+        expectedAllCarExcludes = [
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp'),
+            ]
+        actualAllCarsInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            allCarPaths, stage)
+        self.assertEqual(actualAllCarsInEx,
+            (expectedAllCarIncludes, expectedAllCarExcludes))
+
+        # Force includes only with minInclusionRatio.
+        expectedAllCarIncludes = [
+            Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp'),
+            Sdf.Path('/World/City_set/Misc_grp/CarD')
+            ]
+        expectedAllCarExcludes = []
+        actualAllCarsInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            allCarPaths, stage, minInclusionRatio=1.0)
+        self.assertEqual(actualAllCarsInEx,
+            (expectedAllCarIncludes, expectedAllCarExcludes))
+
+        # Ignored paths. By ignoring most of the Misc_grp (except CarD), we
+        # should be able to make the include path the entire City_set, excluding
+        # the Bikes_grp since it wasn't ignored.
+        expectedAllCarIncludes = [
+            Sdf.Path('/World/City_set')
+            ]
+        expectedAllCarExcludes = [
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp')
+            ]
+        ignoredPaths = [
+            Sdf.Path('/World/City_set/Misc_grp'),
+            Sdf.Path('/World/City_set/Misc_grp/TruckA'),
+            Sdf.Path('/World/City_set/Misc_grp/TruckA/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BicycleA'),
+            Sdf.Path('/World/City_set/Misc_grp/BicycleA/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeE'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeE/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeF'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeF/Geom'),
+            ]
+        actualAllCarsInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            allCarPaths, stage, pathsToIgnore=ignoredPaths)
+        self.assertEqual(actualAllCarsInEx,
+            (expectedAllCarIncludes, expectedAllCarExcludes))
+
+        # Ignored paths. Similar to the previous case, except also ignore some
+        # (but not all) of Bikes_grp. The result shouldn't change, since only
+        # some of Bikes_grp's paths are ignored during the algorithm.
+        ignoredPaths = [
+            Sdf.Path('/World/City_set/Misc_grp'),
+            Sdf.Path('/World/City_set/Misc_grp/TruckA'),
+            Sdf.Path('/World/City_set/Misc_grp/TruckA/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BicycleA'),
+            Sdf.Path('/World/City_set/Misc_grp/BicycleA/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeE'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeE/Geom'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeF'),
+            Sdf.Path('/World/City_set/Misc_grp/BikeF/Geom'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp/BikeA'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp/BikeA/Geom'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp/BikeB'),
+            Sdf.Path('/World/City_set/Vehicles_grp/Bikes_grp/BikeB/Geom'),
+            ]
+        actualAllCarsInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            allCarPaths, stage, pathsToIgnore=ignoredPaths)
+        self.assertEqual(actualAllCarsInEx,
+            (expectedAllCarIncludes, expectedAllCarExcludes))
+
+        # Single path in collection shouldn't cause infinite loop.
+        # (Algorithm forced to run instead of early-outing because
+        # minIncludeExcludeCollectionSize=1.)
+        singlePath = [
+            Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarA')
+            ]
+        actualSingleInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            singlePath, stage, minIncludeExcludeCollectionSize=1)
+        self.assertEqual(actualSingleInEx, (singlePath, []))
+
+        # Ancestor paths should just pick the root path, and shouldn't
+        # infinite loop either.
+        ancestorPaths = [
+            Sdf.Path('/World'),
+            Sdf.Path('/World/Room_set'),
+            Sdf.Path('/World/Room_set/Table_grp'),
+            Sdf.Path('/World/Room_set/Table_grp/Pencils_grp'),
+            Sdf.Path('/World/Room_set/Table_grp/Pencils_grp/PencilA'),
+            Sdf.Path('/World/Room_set/Table_grp/Pencils_grp/PencilA/Geom')
+            ]
+        expectedAncestorIncludes = [Sdf.Path('/World')]
+        expectedAncestorExcludes = []
+        ancestorInEx = UsdUtils.ComputeCollectionIncludesAndExcludes(
+            ancestorPaths, stage)
+        self.assertEqual(ancestorInEx,
+            (expectedAncestorIncludes, expectedAncestorExcludes))
+
     def test_CreateCollections(self):
         carPaths = [Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarA'),
                     Sdf.Path('/World/City_set/Vehicles_grp/Cars_grp/CarB'),
@@ -281,6 +391,44 @@ class TestUsdUtilsAuthoring(unittest.TestCase):
                 for p in lampCPaths: 
                     self.assertTrue(p in includedPaths)
 
+    def test_GetDirtyLayers(self):
+        """Validates that we get all modified layers from a UsdStage"""
+        layer1 = Sdf.Layer.FindOrOpen("dirtyLayer1.usda")
+        layer2 = Sdf.Layer.FindOrOpen("dirtyLayer2.usda")
+        layer3 = Sdf.Layer.FindOrOpen("dirtyLayer3.usda")
+        fakeLayer = Sdf.Layer.FindOrOpen("123fake.usda")
+        self.assertIsNotNone(layer1)
+        self.assertIsNotNone(layer2)
+        self.assertIsNotNone(layer3)
+        self.assertIsNone(fakeLayer)
+
+        stage = Usd.Stage.Open(layer1)
+        sessionLayer = stage.GetSessionLayer()
+        prim = stage.GetPrimAtPath('/Root')
+        hello = prim.GetAttribute('hello')
+        dirtyLayers = UsdUtils.GetDirtyLayers(stage)
+        self.assertEqual(len(dirtyLayers), 0)
+
+        stage.SetEditTarget(Usd.EditTarget(layer3))
+        hello.Set('edit')
+        dirtyLayers = UsdUtils.GetDirtyLayers(stage)
+        self.assertEqual(len(dirtyLayers), 1)
+        self.assertIn(layer3, dirtyLayers)
+
+        stage.SetEditTarget(Usd.EditTarget(layer1))
+        hello.Set('edit')
+        dirtyLayers = UsdUtils.GetDirtyLayers(stage)
+        self.assertEqual(len(dirtyLayers), 2)
+        self.assertIn(layer1, dirtyLayers)
+        self.assertIn(layer3, dirtyLayers)
+
+        stage.SetEditTarget(Usd.EditTarget(sessionLayer))
+        hello.Set('edit')
+        dirtyLayers = UsdUtils.GetDirtyLayers(stage)
+        self.assertEqual(len(dirtyLayers), 3)
+        self.assertIn(layer1, dirtyLayers)
+        self.assertIn(layer3, dirtyLayers)
+        self.assertIn(sessionLayer, dirtyLayers)
 
 if __name__=="__main__":
     unittest.main()

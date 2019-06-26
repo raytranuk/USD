@@ -28,7 +28,7 @@
 
 #include "pxr/pxr.h"
 #include "pxr/usd/usd/api.h"
-#include "pxr/usd/usd/schemaBase.h"
+#include "pxr/usd/usd/apiSchemaBase.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/stage.h"
 
@@ -121,10 +121,10 @@ class SdfAssetPath;
 /// 
 /// <b>Creating collections in C++</b>
 /// 
-/// \snippet examples.cpp AddCollections
+/// \snippet examples.cpp ApplyCollections
 /// 
 ///
-class UsdCollectionAPI : public UsdSchemaBase
+class UsdCollectionAPI : public UsdAPISchemaBase
 {
 public:
     /// Compile-time constant indicating whether or not this class corresponds
@@ -138,12 +138,23 @@ public:
     /// UsdPrim.
     static const bool IsTyped = false;
 
+    /// Compile-time constant indicating whether or not this class represents an 
+    /// applied API schema, i.e. an API schema that has to be applied to a prim
+    /// with a call to auto-generated Apply() method before any schema 
+    /// properties are authored.
+    static const bool IsApplied = true;
+    
+    /// Compile-time constant indicating whether or not this class represents a 
+    /// multiple-apply API schema. Mutiple-apply API schemas can be applied 
+    /// to the same prim multiple times with different instance names. 
+    static const bool IsMultipleApply = true;
+
     /// Construct a UsdCollectionAPI on UsdPrim \p prim .
     /// Equivalent to UsdCollectionAPI::Get(prim.GetStage(), prim.GetPath())
     /// for a \em valid \p prim, but will not immediately throw an error for
     /// an invalid \p prim
     explicit UsdCollectionAPI(const UsdPrim& prim=UsdPrim())
-        : UsdSchemaBase(prim)
+        : UsdAPISchemaBase(prim)
     {
     }
 
@@ -151,7 +162,7 @@ public:
     /// Should be preferred over UsdCollectionAPI(schemaObj.GetPrim()),
     /// as it preserves SchemaBase state.
     explicit UsdCollectionAPI(const UsdSchemaBase& schemaObj)
-        : UsdSchemaBase(schemaObj)
+        : UsdAPISchemaBase(schemaObj)
     {
     }
 
@@ -179,6 +190,26 @@ public:
     static UsdCollectionAPI
     Get(const UsdStagePtr &stage, const SdfPath &path);
 
+private:
+
+    /// Applies this <b>multiple-apply</b> API schema to the given \p prim 
+    /// along with the given instance name, \p name. 
+    /// 
+    /// This information is stored by adding "CollectionAPI:<i>name</i>" 
+    /// to the token-valued, listOp metadata \em apiSchemas on the prim.
+    /// For example, if \p name is 'instance1', the token 
+    /// 'CollectionAPI:instance1' is added to 'apiSchemas'.
+    /// 
+    /// \return A valid UsdCollectionAPI object is returned upon success. 
+    /// An invalid (or empty) UsdCollectionAPI object is returned upon 
+    /// failure. See \ref UsdAPISchemaBase::_MultipleApplyAPISchema() for 
+    /// conditions resulting in failure. 
+    /// 
+    /// \sa UsdPrim::GetAppliedSchemas()
+    /// \sa UsdPrim::HasAPI()
+    ///
+    static UsdCollectionAPI 
+    _Apply(const UsdPrim &prim, const TfToken &name);
 
 private:
     // needs to invoke _GetStaticTfType.
@@ -192,6 +223,11 @@ private:
     USD_API
     virtual const TfType &_GetTfType() const;
 
+    // This override returns true since UsdCollectionAPI is an 
+    // applied API schema.
+    USD_API
+    virtual bool _IsAppliedAPISchema() const override;
+
 public:
     // ===================================================================== //
     // Feel free to add custom code below this line, it will be preserved by 
@@ -204,7 +240,26 @@ public:
     // ===================================================================== //
     // --(BEGIN CUSTOM CODE)--
 
+protected:
+    // This virtual override customizes the validity checking for a 
+    // UsdCollectionAPI object. It is invoked when the schema object is 
+    // converted to a bool. 
+    // A collection is said to be valid if it has a non-empty instance name and 
+    // has a valid "expansionRule" attribute.
+    USD_API
+    virtual bool _IsCompatible() const override;
+
 public:
+    /// Constructor to initialize a UsdCollectionAPI object for a collection 
+    /// named \p name on the prim, \p prim.
+    /// This does not create the collection by instantiating the 'expansionRule'
+    /// property. If the collection already exists, it's properties are not 
+    /// modified. Use ApplyCollection() to create a collection on a prim.
+    UsdCollectionAPI(const UsdPrim& prim, 
+                     const TfToken &name) :
+        UsdAPISchemaBase(prim, /*instanceName*/ name)
+    { }
+
     /// Adds a new collection named \p name on the given prim, \p prim with the 
     /// specified expansion-rule, \p expansionRule.
     /// 
@@ -217,25 +272,20 @@ public:
     /// be the same as one of the core collection schema properties,
     /// i.e. should not be 'expansionRule' or 'includes' or 'excludes'.
     USD_API
-    static UsdCollectionAPI AddCollection(
+    static UsdCollectionAPI ApplyCollection(
         const UsdPrim& prim, 
         const TfToken &name, 
         const TfToken &expansionRule=UsdTokens->expandPrims);
 
-    /// Returns the collection named, \p name on the given prim, \p prim.
+    /// Returns the collection represented by the given collection path, 
+    /// \p collectionPath on the given USD stage.
     USD_API
-    static UsdCollectionAPI GetCollection(const UsdPrim &prim, const TfToken &name);
+    static UsdCollectionAPI GetCollection(const UsdStagePtr &stage, 
+                                          const SdfPath &collectionPath);
 
     /// Returns all the named collections on the given USD prim. 
     USD_API
     static std::vector<UsdCollectionAPI> GetAllCollections(const UsdPrim &prim);
-
-    /// Returns whether the collection is valid. A collection is said to be 
-    /// valid if it has a non-empty name and has a valid "expansionRule" 
-    /// attribute.
-    explicit operator bool() {
-        return !_name.IsEmpty() && _GetExpansionRuleAttr();
-    }
 
     /// Represents a flattened view of a collection. An object of this class 
     /// is computed by calling UsdCollectionAPI::ComputeMembershipQuery() on a 
@@ -244,7 +294,7 @@ public:
     class MembershipQuery {
     public:
         /// Default Constructor, creates an empty MembershipQuery object for 
-        /// passing into UsdCollectionAPI::CreateMembershipQuery() via a 
+        /// passing into UsdCollectionAPI::ComputeMembershipQuery() via a 
         /// pointer.
         MembershipQuery() {}
         
@@ -297,14 +347,38 @@ public:
         bool HasExcludes() const {
             return _hasExcludes;
         }
+
+        /// Equality operator
+        bool operator==(MembershipQuery const& rhs) const {
+            return _hasExcludes == rhs._hasExcludes &&
+                _pathExpansionRuleMap == rhs._pathExpansionRuleMap;
+        }
+
+        /// Inequality operator
+        bool operator!=(MembershipQuery const& rhs) const {
+            return !(*this == rhs);
+        }
+
+        /// Hash functor
+        struct Hash {
+            USD_API
+            size_t operator()(MembershipQuery const& query) const;
+        };
+
+        /// Hash function
+        inline size_t GetHash() const {
+            return Hash()(*this);
+        }
+
     private:
-        // Holds an ordered map describing membership of paths in this collection
-        // and the associated expansionRule for how the paths are to be expanded. 
-        // If a collection includes another collection, the included collection's
-        // _PathExpansionRuleMap is merged into this one. 
+        // Holds an unordered map describing membership of paths in this 
+        // collection and the associated expansionRule for how the paths are to 
+        // be expanded. If a collection includes another collection, the 
+        // included collection's _PathExpansionRuleMap is merged into this one. 
         // If a path is excluded, its expansion rule is set to 
         // UsdTokens->exclude.
-        using _PathExpansionRuleMap = std::map<SdfPath, TfToken>;
+        using _PathExpansionRuleMap = std::unordered_map<SdfPath, 
+                                        TfToken, SdfPath::Hash>;
 
         // Add \p path as an included path in the MembershipQuery with the 
         // given expansion rule, \p expansionRule.
@@ -340,7 +414,7 @@ public:
     /// Returns the name of the collection.
     USD_API
     TfToken GetName() const {
-        return _name;
+        return _GetInstanceName();
     }
 
     /// Returns the canonical path that represents this collection. 
@@ -456,6 +530,42 @@ public:
 
     /// @}
 
+    /// \anchor UsdCollectionAPI_AuthoringAPI
+    /// \name Collection Authoring API
+    /// 
+    /// Convenience API for adding or removing prims and properties to (or 
+    /// from) a collection..
+    /// 
+    /// @{
+
+    /// Includes or adds the given path, \p pathToInclude in the collection. 
+    /// 
+    /// This does nothing if the path is already included in the collection. 
+    /// 
+    /// This does not modify the expansion-rule of the collection. Hence, if the 
+    /// expansionRule is <i>expandPrims</i> or <i>expandPrimsAndProperties</i>, 
+    /// then the descendants of \p pathToInclude will be also included in the 
+    /// collection unless explicitly excluded.
+    /// 
+    /// \sa UsdCollectionAPI::ExcludePath()
+    USD_API 
+    bool IncludePath(const SdfPath &pathToInclude) const;
+
+    /// Excludes or removes the given path, \p pathToExclude from the collection.
+    /// 
+    /// This does nothing if the path is not included in the collection. 
+    ///
+    /// This does not modify the expansion-rule of the collection. Hence, if the 
+    /// expansionRule is <i>expandPrims</i> or <i>expandPrimsAndProperties</i>, 
+    /// then the descendants of \p pathToExclude will also be excluded from the 
+    /// collection, unless explicitly included.
+    ///
+    /// \sa UsdCollectionAPI::IncludePath()
+    USD_API
+    bool ExcludePath(const SdfPath &pathToExclude) const; 
+
+    /// @}
+    
     /// Validates the collection by checking the following rules:
     /// * a collection's expansionRule should be one of "explicitOnly", 
     ///   "expandPrims" or "expandPrimsAndProperties".
@@ -478,19 +588,7 @@ public:
     bool BlockCollection() const;
 
 private:
-    // Constructor for creating a collection with the given name on \p prim 
-    // with the given \p expansionRule.
-    UsdCollectionAPI(const UsdPrim& prim, 
-                     const TfToken &name, 
-                     const TfToken &expansionRule);
-    
-    // Constructor to initialize a UsdCollectionAPI object for an already 
-    // existing collection.
-    UsdCollectionAPI(const UsdPrim& prim, 
-                     const TfToken &name);
-
     // Returns the collection:<name>:expansionRule attribute of the collection.
-    USD_API
     UsdAttribute _GetExpansionRuleAttr(bool create=false) const;
 
     // Returns the collection:<name>:includes relationship.
@@ -526,9 +624,6 @@ private:
         const Usd_PrimFlagsPredicate &pred,
         std::set<UsdObject> *includedObjects,
         SdfPathSet *includedPaths);
-
-    // The name of the collection.
-    TfToken _name;
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

@@ -19,10 +19,11 @@ pxr_library(glf
         arch
         garch
         gf
+        hf
         js
         plug
         tf
-        tracelite
+        trace
         sdf
         ${Boost_PYTHON_LIBRARY}
         ${Boost_SYSTEM_LIBRARY}
@@ -46,6 +47,7 @@ pxr_library(glf
         baseTexture
         baseTextureData
         bindingMap
+        contextCaps
         diagnostic
         drawTarget
         glew

@@ -23,9 +23,10 @@
 //
 #include "pxr/usdImaging/usdImaging/materialAdapter.h"
 #include "pxr/usdImaging/usdImaging/delegate.h"
+#include "pxr/usdImaging/usdImaging/indexProxy.h"
 #include "pxr/usdImaging/usdImaging/tokens.h"
 
-#include "pxr/imaging/hd/shader.h"
+#include "pxr/imaging/hd/material.h"
 
 #include "pxr/usd/usdShade/connectableAPI.h"
 #include "pxr/usd/usdRi/materialAPI.h"
@@ -46,7 +47,7 @@ UsdImagingMaterialAdapter::~UsdImagingMaterialAdapter()
 bool
 UsdImagingMaterialAdapter::IsSupported(UsdImagingIndexProxy const* index) const
 {
-    return index->IsSprimTypeSupported(HdPrimTypeTokens->shader);
+    return index->IsSprimTypeSupported(HdPrimTypeTokens->material);
 }
 
 bool
@@ -62,14 +63,14 @@ UsdImagingMaterialAdapter::Populate(UsdPrim const& prim,
                             UsdImagingIndexProxy* index,
                             UsdImagingInstancerContext const* instancerContext)
 {
-    // Since shaders are populated by reference, they need to take care not to
+    // Since material are populated by reference, they need to take care not to
     // be populated multiple times.
     SdfPath cachePath = prim.GetPath();
     if (index->IsPopulated(cachePath)) {
         return cachePath;
     }
 
-    index->InsertSprim(HdPrimTypeTokens->shader,
+    index->InsertSprim(HdPrimTypeTokens->material,
                        cachePath,
                        prim, shared_from_this());
     HD_PERF_COUNTER_INCR(UsdImagingTokens->usdPopulatedPrimCount);
@@ -83,7 +84,7 @@ UsdImagingMaterialAdapter::TrackVariability(UsdPrim const& prim,
                                           SdfPath const& cachePath,
                                           HdDirtyBits* timeVaryingBits,
                                           UsdImagingInstancerContext const*
-                                              instancerContext)
+                                              instancerContext) const
 {
     // XXX: Time-varying parameters are not yet implemented
 }
@@ -95,17 +96,29 @@ UsdImagingMaterialAdapter::UpdateForTime(UsdPrim const& prim,
                                        UsdTimeCode time,
                                        HdDirtyBits requestedBits,
                                        UsdImagingInstancerContext const*
-                                           instancerContext)
+                                           instancerContext) const
 {
     UsdImagingValueCache* valueCache = _GetValueCache();
 
-    if (requestedBits & HdShader::DirtyResource) {
-        // Walk the material network and generate a HdMaterialNodes structure
-        // to store it in the value cache.
-        HdMaterialNodes materialNodes;
-        _GetMaterialNodes(prim, &materialNodes);
+    if (requestedBits & HdMaterial::DirtyResource) {
+        // Walk the material network and generate a HdMaterialNetworkMap
+        // structure to store it in the value cache.
+        HdMaterialNetworkMap materialNetworkMap;
+        _GetMaterialNetworkMap(prim, &materialNetworkMap);
 
-        valueCache->GetMaterialResource(cachePath) = materialNodes;
+        valueCache->GetMaterialResource(cachePath) = materialNetworkMap;
+
+        // Compute union of primvars from all networks
+        std::vector<TfToken> primvars;
+        for (const auto& entry: materialNetworkMap.map) {
+            primvars.insert(primvars.end(),
+                            entry.second.primvars.begin(),
+                            entry.second.primvars.end());
+        }
+        std::sort(primvars.begin(), primvars.end());
+        primvars.erase(std::unique(primvars.begin(), primvars.end()),
+                       primvars.end());
+        valueCache->GetMaterialPrimvars(cachePath) = primvars;
     }
 }
 
@@ -134,111 +147,132 @@ void
 UsdImagingMaterialAdapter::_RemovePrim(SdfPath const& cachePath,
                                  UsdImagingIndexProxy* index)
 {
-    index->RemoveSprim(HdPrimTypeTokens->shader, cachePath);
+    index->RemoveSprim(HdPrimTypeTokens->material, cachePath);
 }
 
 static
-bool visitNode(UsdShadeShader const & shadeNode, 
-               std::vector<UsdShadeInput> const & shadeNodeInputs,
-               HdMaterialNodes *materialNodes)
+void extractPrimvarsFromNode(UsdShadeShader const & shadeNode, 
+                             HdMaterialNode const & node, 
+                             HdMaterialNetwork *materialNetwork)
+{
+    // Check if it is a node that reads primvars.
+    // XXX : We could be looking at more stuff here like manifolds..
+    if (node.type == TfToken("Primvar_3")) {
+        // Extract the primvar name from the usd shade node
+        // and store it in the list of primvars in the network
+        UsdShadeInput nameAttrib = shadeNode.GetInput(TfToken("varname"));
+        if (nameAttrib) {
+            VtValue value;
+            nameAttrib.Get(&value);
+            if (value.IsHolding<std::string>()) {
+                materialNetwork->primvars.push_back(
+                    TfToken(value.Get<std::string>()));
+            }
+        }        
+    }
+}
+
+// Walk the shader graph and emit nodes in topological order
+// to avoid forward-references.
+static
+void walkGraph(UsdShadeShader const & shadeNode, 
+               HdMaterialNetwork *materialNetwork)
 {
     // Store the path of the node
     HdMaterialNode node;
     node.path = shadeNode.GetPath();
+    if (!TF_VERIFY(node.path != SdfPath::EmptyPath())) {
+        return;
+    }
+    // If this node has already been found via another path, we do
+    // not need to add it again.
+    for (HdMaterialNode const& existingNode: materialNetwork->nodes) {
+        if (existingNode.path == node.path) {
+            return;
+        }
+    }
+
+    // Visit the inputs of this node to ensure they are emitted first.
+    const std::vector<UsdShadeInput> shadeNodeInputs = shadeNode.GetInputs();
+    for (UsdShadeInput const& input: shadeNodeInputs) {
+        // Check if this input is a connection and if so follow the path
+        UsdShadeConnectableAPI source;
+        TfToken outputName;
+        UsdShadeAttributeType sourceType;
+        if (UsdShadeConnectableAPI::GetConnectedSource(input, 
+                &source, &outputName, &sourceType)) {
+            // When we find a connection, we try to walk it.
+            UsdShadeShader connectedNode(source);
+            walkGraph(connectedNode, materialNetwork);
+        }
+    }
 
     // Extract the type of the node
     VtValue value;
     shadeNode.GetIdAttr().Get(&value);
     if (value.IsHolding<TfToken>()){
         node.type = value.UncheckedGet<TfToken>();
+
+        // If a node is recognizable, we will try to extract the primvar 
+        // names that is using since this can help render delegates 
+        // optimize what what is needed from a prim when making data 
+        // accessible for renderers.
+        extractPrimvarsFromNode(shadeNode, node, materialNetwork);
     } else {
         TF_WARN("UsdShade Shader without an id: %s.", node.path.GetText());
         node.type = TfToken("PbsNetworkMaterialStandIn_2");
     }
 
-    // Protect against inserting the same node twice, and return false. 
-    // Authoring tools could guarantee that too during content creation.
-    auto dup = std::find(std::begin(materialNodes->nodes), 
-                         std::end(materialNodes->nodes), 
-                         node);
-    if (dup != std::end(materialNodes->nodes)) {
-        TF_WARN("UsdShade Shader node duplicated: %s.", node.path.GetText());
-        return false;
-    }
-
     // Add the parameters and the relationships of this node
-    UsdShadeConnectableAPI source;
-    TfToken outputName;
-    UsdShadeAttributeType sourceType;
-    for (size_t i = 0; i<shadeNodeInputs.size(); i++) {
-        
+    for (UsdShadeInput const& input: shadeNodeInputs) {
         // Check if this input is a connection and if so follow the path
-        if (UsdShadeConnectableAPI::GetConnectedSource(shadeNodeInputs[i], 
+        UsdShadeConnectableAPI source;
+        TfToken outputName;
+        UsdShadeAttributeType sourceType;
+        if (UsdShadeConnectableAPI::GetConnectedSource(input,
             &source, &outputName, &sourceType)) {
             
             // Store the relationship
             HdMaterialRelationship relationship;
             relationship.sourceId = shadeNode.GetPath();
-            relationship.sourceTerminal = shadeNodeInputs[i].GetFullName();
+            relationship.sourceTerminal = input.GetBaseName();
             relationship.remoteId = source.GetPath();
             relationship.remoteTerminal = outputName;
-            materialNodes->relationships.push_back(relationship);
+            materialNetwork->relationships.push_back(relationship);
         } else {
             // Parameters detected, let's store it
-            shadeNodeInputs[i].Get(&value);
-            node.parameters[shadeNodeInputs[i].GetFullName()] = value;
+            if (input.Get(&value)) {
+                node.parameters[input.GetBaseName()] = value;
+            }
         }
     }
 
-    materialNodes->nodes.push_back(node);
-    return true;
-}
-
-static
-void walkGraph(UsdShadeShader const & shadeNode, HdMaterialNodes *materialNodes)
-{
-    // Visit the current node, and if it was correctly inserted, visit the
-    // inputs after. It is possible the node was not inserted (for instance
-    // when its Id attribute is incorrect).
-    std::vector<UsdShadeInput> shadeNodeInputs = shadeNode.GetInputs();
-    if (!visitNode(shadeNode, shadeNodeInputs, materialNodes)) {
-        return;
-    } 
-
-    // Visit the inputs of this node
-    UsdShadeConnectableAPI source;
-    TfToken outputName;
-    UsdShadeAttributeType sourceType;
-    for (size_t i = 0; i<shadeNodeInputs.size(); i++) {
-        // Check if this input is a connection and if so follow the path
-        if (UsdShadeConnectableAPI::GetConnectedSource(shadeNodeInputs[i], 
-                &source, &outputName, &sourceType)) {
-            // When we find a connection, we try to walk it.
-            UsdShadeShader connectedNode(source);
-            walkGraph(connectedNode, materialNodes);
-        }
-    }
+    materialNetwork->nodes.push_back(node);
 }
 
 void 
-UsdImagingMaterialAdapter::_GetMaterialNodes(UsdPrim const &usdPrim, 
-                                            HdMaterialNodes *materialNodes)
+UsdImagingMaterialAdapter::_GetMaterialNetworkMap(UsdPrim const &usdPrim, 
+    HdMaterialNetworkMap *materialNetworkMap) const
 {
     // This function expects a usdPrim of type Material. However, it will
-    // only be able to fill the HdMaterialNodes structures if the Material
+    // only be able to fill the HdMaterialNetwork structures if the Material
     // contains a material network with a riLook relationship. Otherwise, it
-    // will return the HdMaterialNodes structures without any change.
+    // will return the HdMaterialNetwork structures without any change.
     UsdRiMaterialAPI m(usdPrim);
 
+    // For each network type:
     // Resolve the binding to the first node which
     // is usually the standin node in the case of a UsdRi.
     // If it fails to provide a relationship then we are not in a 
-    // usdPrim that contains a correct bxdf terminal to a UsdShade Shader node.
-    if( UsdRelationship matRel = m.GetBxdfOutput().GetRel() ) {
-        UsdShadeShader shadeNode(
-            UsdImaging_MaterialStrategy::GetTargetedShader(
-                usdPrim.GetPrim(), matRel));
-        walkGraph(shadeNode, materialNodes);
+    // usdPrim that contains a correct terminal to a UsdShade Shader node.
+    if (UsdShadeShader surfaceShader = m.GetSurface()) {
+        walkGraph(surfaceShader,
+                  &materialNetworkMap->map[UsdImagingTokens->bxdf]);
+    }
+
+    if (UsdShadeShader dispShader = m.GetDisplacement()) {
+        walkGraph(dispShader,
+                  &materialNetworkMap->map[UsdImagingTokens->displacement]);
     }
 }
 

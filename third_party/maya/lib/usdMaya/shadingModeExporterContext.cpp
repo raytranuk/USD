@@ -32,6 +32,7 @@
 #include "pxr/usd/usdGeom/scope.h"
 #include "pxr/usd/usdGeom/subset.h"
 #include "pxr/usd/usdShade/material.h"
+#include "pxr/usd/usdShade/materialBindingAPI.h"
 #include "pxr/usd/usdShade/shader.h"
 
 #include <maya/MDagPath.h>
@@ -43,36 +44,35 @@
 
 PXR_NAMESPACE_OPEN_SCOPE
 
-TF_DEFINE_ENV_SETTING(PIXMAYA_EXPORT_OLD_STYLE_FACESETS, true, 
+TF_DEFINE_ENV_SETTING(PIXMAYA_EXPORT_OLD_STYLE_FACESETS, false, 
     "Whether maya/usdExport should create face-set bindings encoded in the "
     "old-style, using UsdGeomFaceSetAPI.");
 
 PxrUsdMayaShadingModeExportContext::PxrUsdMayaShadingModeExportContext(
         const MObject& shadingEngine,
         const UsdStageRefPtr& stage,
-        bool mergeTransformAndShape,
-        const PxrUsdMayaUtil::ShapeSet& bindableRoots,
-        SdfPath overrideRootPath) :
+        const PxrUsdMayaUtil::MDagPathMap<SdfPath>::Type& dagPathToUsdMap,
+        const PxrUsdMayaExportParams &exportParams) :
     _shadingEngine(shadingEngine),
     _stage(stage),
-    _mergeTransformAndShape(mergeTransformAndShape),
-    _overrideRootPath(overrideRootPath)
+    _dagPathToUsdMap(dagPathToUsdMap),
+    _exportParams(exportParams)
 {
-    if (bindableRoots.empty()) {
+    if (exportParams.bindableRoots.empty()) {
         // if none specified, push back '/' which encompasses all
         _bindableRoots.insert(SdfPath::AbsoluteRootPath());
     }
     else {
-        TF_FOR_ALL(bindableRootIter, bindableRoots) {
+        TF_FOR_ALL(bindableRootIter, exportParams.bindableRoots) {
             const MDagPath& bindableRootDagPath = *bindableRootIter;
 
 
             SdfPath usdPath = PxrUsdMayaUtil::MDagPathToUsdPath(bindableRootDagPath, 
-                _mergeTransformAndShape);
+                _exportParams.mergeTransformAndShape);
 
-            // If _overrideRootPath is not empty, replace the root namespace with it
-            if (!_overrideRootPath.IsEmpty() ) {
-                usdPath = usdPath.ReplacePrefix(usdPath.GetPrefixes()[0], _overrideRootPath);
+            // If overrideRootPath is not empty, replace the root namespace with it
+            if (!_exportParams.overrideRootPath.IsEmpty() ) {
+                usdPath = usdPath.ReplacePrefix(usdPath.GetPrefixes()[0], _exportParams.overrideRootPath);
             }
 
             _bindableRoots.insert(usdPath);
@@ -132,11 +132,12 @@ PxrUsdMayaShadingModeExportContext::GetAssignments() const
             continue;
 
         SdfPath usdPath = PxrUsdMayaUtil::MDagPathToUsdPath(dagPath, 
-            _mergeTransformAndShape);
+            _exportParams.mergeTransformAndShape);
 
-        // If _overrideRootPath is not empty, replace the root namespace with it
-        if (!_overrideRootPath.IsEmpty() ) {
-            usdPath = usdPath.ReplacePrefix(usdPath.GetPrefixes()[0], _overrideRootPath);
+        // If _exportParams.overrideRootPath is not empty, replace the root 
+        // namespace with it
+        if (!_exportParams.overrideRootPath.IsEmpty() ) {
+            usdPath = usdPath.ReplacePrefix(usdPath.GetPrefixes()[0], _exportParams.overrideRootPath);
         }
         
         // If this path has already been processed, skip it.
@@ -244,31 +245,36 @@ PxrUsdMayaShadingModeExportContext::MakeStandardMaterialPrim(
 
             UsdPrim boundPrim = stage->OverridePrim(boundPrimPath);
             if (faceIndices.empty()) {
-                material.Bind(boundPrim);
+                if (!_exportParams.exportCollectionBasedBindings) {
+                    UsdShadeMaterialBindingAPI(boundPrim).Bind(material);
+                }
+
                 if (boundPrimPaths) {
                     boundPrimPaths->insert(boundPrim.GetPath());
                 }
             } else if (TfGetEnvSetting(PIXMAYA_EXPORT_OLD_STYLE_FACESETS)) {
-                UsdGeomFaceSetAPI faceSet = material.CreateMaterialFaceSet(
-                        boundPrim);
+                UsdGeomFaceSetAPI faceSet = 
+                        material.CreateMaterialFaceSet(boundPrim);
                 faceSet.AppendFaceGroup(faceIndices, materialPath);
                 // XXX: don't bother updating boundPrimPaths in this case as 
                 // old style facesets will be deprecated soon.
             } else {
-                UsdGeomSubset faceSubset = 
-                    UsdShadeMaterial::CreateMaterialBindSubset(
-                        UsdGeomImageable(boundPrim), 
-                        /* subsetName */ TfToken(materialName),
-                        faceIndices, 
-                        /* elementType */ UsdGeomTokens->face);
-                material.Bind(faceSubset.GetPrim());
+                UsdGeomSubset faceSubset = UsdShadeMaterialBindingAPI(
+                        boundPrim).CreateMaterialBindSubset(
+                            /* subsetName */ TfToken(materialName),
+                            faceIndices, 
+                            /* elementType */ UsdGeomTokens->face);
+
+                if (!_exportParams.exportCollectionBasedBindings) {
+                    material.Bind(faceSubset.GetPrim());
+                }
                 
                 if (boundPrimPaths) {
                     boundPrimPaths->insert(faceSubset.GetPath());
                 }
 
-                UsdShadeMaterial::SetMaterialBindSubsetsFamilyType(
-                    UsdGeomImageable(boundPrim), UsdGeomTokens->partition);
+                UsdShadeMaterialBindingAPI(boundPrim)
+                    .SetMaterialBindSubsetsFamilyType(UsdGeomTokens->partition);
             }
         }
 

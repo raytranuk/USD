@@ -35,7 +35,7 @@ pxr_library(usdRi
         rmanUtilities
         rslShader
         splineAPI
-        statements
+        statementsAPI
         textureAPI
         tokens
 
@@ -69,7 +69,7 @@ pxr_library(usdRi
         wrapRmanUtilities.cpp
         wrapRslShader.cpp
         wrapSplineAPI.cpp
-        wrapStatements.cpp
+        wrapStatementsAPI.cpp
         wrapTextureAPI.cpp
         wrapTokens.cpp
 
@@ -92,6 +92,8 @@ pxr_register_test(testUsdRiSchemata
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdRiSchemata"  
     EXPECTED_RETURN_CODE 0
+    ENV
+        USD_RI_WRITE_BXDF_OUTPUT=0
 )
 
 pxr_register_test(testUsdRiSplineAPI

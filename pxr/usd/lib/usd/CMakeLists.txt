@@ -10,7 +10,7 @@ pxr_library(usd
         ar
         plug
         tf
-        tracelite
+        trace
         vt
         work
         ${Boost_PYTHON_LIBRARY}
@@ -21,6 +21,7 @@ pxr_library(usd
         ${TBB_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
+        apiSchemaBase
         attribute
         clipsAPI
         attributeQuery
@@ -73,6 +74,7 @@ pxr_library(usd
         instanceKey
         integerCoding
         interpolators
+        valueUtils
 
     PUBLIC_HEADERS
         api.h
@@ -80,7 +82,6 @@ pxr_library(usd
     PRIVATE_HEADERS
         crateDataTypes.h
         crateValueInliners.h
-        valueUtils.h
         wrapUtils.h
 
     PYTHON_CPPFILES
@@ -88,6 +89,7 @@ pxr_library(usd
 
     PYMODULE_CPPFILES
         module.cpp
+        wrapAPISchemaBase.cpp
         wrapAttribute.cpp
         wrapAttributeQuery.cpp
         wrapClipsAPI.cpp
@@ -155,6 +157,7 @@ endif()
 pxr_test_scripts(
     testenv/testUsdAttributeBlocking.py
     testenv/testUsdAttributeConnections.py
+    testenv/testUsdBugs.py
     testenv/testUsdBug119633.py
     testenv/testUsdBug141491.py
     testenv/testUsdChangeProcessing.py
@@ -212,6 +215,13 @@ pxr_build_test(testUsdCreateAttributeCpp
         usd
     CPPFILES
         testenv/testUsdCreateAttributeCpp.cpp
+)
+
+pxr_build_test(testUsdHardToReach
+    LIBRARIES
+        usd
+    CPPFILES
+        testenv/testUsdHardToReach.cpp
 )
 
 pxr_build_test(testUsdIntegerCoding
@@ -320,6 +330,11 @@ pxr_install_test_dir(
 pxr_install_test_dir(
     SRC testenv/testUsdFileFormats
     DEST testUsdFileFormats
+)
+
+pxr_install_test_dir(
+    SRC testenv/testUsdFileFormats
+    DEST testUsdFileFormats_pread
 )
 
 pxr_install_test_dir(
@@ -594,6 +609,14 @@ pxr_register_test(testUsdPrims
 pxr_register_test(testUsdFileFormats
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdFileFormats"
+    EXPECTED_RETURN_CODE 0
+)
+
+pxr_register_test(testUsdFileFormats_pread
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdFileFormats"
+    ENV
+        USDC_USE_PREAD=1
     EXPECTED_RETURN_CODE 0
 )
 

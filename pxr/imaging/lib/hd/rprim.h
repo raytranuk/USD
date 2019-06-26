@@ -31,7 +31,6 @@
 #include "pxr/imaging/hd/drawItem.h"
 #include "pxr/imaging/hd/rprimSharedData.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
-#include "pxr/imaging/hd/shaderKey.h"
 #include "pxr/imaging/hd/types.h"
 #include "pxr/usd/sdf/path.h"
 #include "pxr/base/gf/range3d.h"
@@ -45,10 +44,10 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 class HdBufferSource;
 class HdDrawItem;
+class HdMaterial;
 class HdRenderIndex;
 class HdRepr;
 class HdRenderParam;
-class HdShader;
 
 typedef boost::shared_ptr<HdRepr> HdReprSharedPtr;
 typedef boost::shared_ptr<HdBufferSource> HdBufferSourceSharedPtr;
@@ -91,12 +90,13 @@ public:
     HD_API
     virtual void Finalize(HdRenderParam *renderParam);
 
-    /// Returns the draw items for the requested reprName, these draw items
-    /// should be constructed and cached beforehand by Sync().
+    /// Returns the draw items for the requested reprName, if any.
+    /// These draw items should be constructed and cached beforehand by Sync().
+    /// If no draw items exist, or reprName cannot be found, nullptr
+    /// will be returned.
     HD_API
-    std::vector<HdDrawItem>* GetDrawItems(HdSceneDelegate* delegate,
-                                          TfToken const &reprName,
-                                          bool forced);
+    const std::vector<HdDrawItem*>* GetDrawItems(TfToken const &reprName,
+                                                 bool forced) const;
 
     /// Returns the render tag associated to this rprim
     HD_API
@@ -120,7 +120,7 @@ public:
 
     /// Returns true if any dirty flags are set for this rprim.
     HD_API
-    bool IsDirty(HdChangeTracker &changeTracker);
+    bool IsDirty(HdChangeTracker &changeTracker) const;
 
     /// Set the unique instance id
     HD_API
@@ -181,13 +181,11 @@ public:
     ///
     /// Primvar Query
     ///
-    inline TfTokenVector GetPrimVarVertexNames(HdSceneDelegate* delegate)      const;
-    inline TfTokenVector GetPrimVarVaryingNames(HdSceneDelegate* delegate)     const;
-    inline TfTokenVector GetPrimVarFacevaryingNames(HdSceneDelegate* delegate) const;
-    inline TfTokenVector GetPrimVarUniformNames(HdSceneDelegate* delegate)     const;
-    inline TfTokenVector GetPrimVarConstantNames(HdSceneDelegate* delegate)    const;
+    inline HdPrimvarDescriptorVector
+    GetPrimvarDescriptors(HdSceneDelegate* delegate,
+                          HdInterpolation interpolation) const;
 
-    inline VtValue GetPrimVar(HdSceneDelegate* delegate, const TfToken &name)  const;
+    inline VtValue GetPrimvar(HdSceneDelegate* delegate, const TfToken &name)  const;
 
 protected:
     /// Update objects representation based on dirty bits.
@@ -196,11 +194,12 @@ protected:
               TfToken const &reprName, bool forced,
               HdDirtyBits *dirtyBits);
 
+    HD_API
+    HdReprSharedPtr const & _GetRepr(TfToken const &reprName) const;
 
-    virtual HdReprSharedPtr const &
-        _GetRepr(HdSceneDelegate *sceneDelegate,
-                 TfToken const &reprName,
-                 HdDirtyBits *dirtyBits) = 0;
+    virtual void _UpdateRepr(HdSceneDelegate *sceneDelegate,
+                             TfToken const &reprName,
+                             HdDirtyBits *dirtyBits) = 0;
 
     HD_API
     void _UpdateVisibility(HdSceneDelegate *sceneDelegate,
@@ -210,7 +209,7 @@ protected:
     /// since we're tracking dirtiness in a single bit (e.g. DirtyTransform)
     /// unlike vertex primvars (DirtyPoints-DirtyRefinedPoints)
     HD_API
-    void _PopulateConstantPrimVars(HdSceneDelegate *sceneDelegate,
+    void _PopulateConstantPrimvars(HdSceneDelegate *sceneDelegate,
                                    HdDrawItem *drawItem,
                                    HdDirtyBits *dirtyBits);
 
@@ -228,52 +227,10 @@ protected:
                       HdComputationVector const &computations) const;
 
     HD_API
-    HdBufferArrayRangeSharedPtr
-    _GetSharedPrimvarRange(uint64_t primvarId,
-                    HdBufferSpecVector const &bufferSpecs,
-                    HdBufferArrayRangeSharedPtr const &existing,
-                    bool * isFirstInstance,
-                    HdResourceRegistrySharedPtr const &resourceRegistry) const;
-
-    /// For a given interpolation mode, obtains a set of ExtComputation primVar
-    /// source computations needed for this Rprim.
-    ///
-    /// The list of primVars that are obtained through an ExtComputation
-    /// for the given interpolationMode is obtained from the scene delegate.
-    ///
-    /// The scene delegate also provides information about which output on
-    /// which computation is providing the source of the primVar.
-    ///
-    /// Based on the information, the function creates the necessary
-    /// computations and appends them on to the sources list (the sources vector
-    /// need not be empty).
-    ///
-    /// The caller is expected to pass these computation on these computations
-    /// onto the resource registry (associating them with BARs if it is
-    /// expected the primvar will be downloaded)
-    /// 
-    /// The computation may also need to add sources that are resolved against
-    /// internal BARs that are not to be associated with the primvar BAR. Those
-    /// are returned in the computationSources vector.
-    /// The caller is expected to add them to the resource registry if the
-    /// computation is needed.
-    HD_API
-    void _GetExtComputationPrimVarsComputations(
-                    HdSceneDelegate *sceneDelegate,
-                    HdInterpolation interpolationMode,
-                    HdDirtyBits dirtyBits,
-                    HdBufferSourceVector *sources,
-                    HdComputationVector *computations,
-                    HdBufferSourceVector *computationSources);
+    TfToken _GetReprName(TfToken const &defaultReprName, bool forced) const;
 
     HD_API
-    TfToken _GetReprName(HdSceneDelegate* delegate,
-                         TfToken const &defaultReprName, bool forced,
-                         HdDirtyBits *dirtyBits);
-
-    HD_API
-    virtual HdShaderCodeSharedPtr _GetShaderCode(HdSceneDelegate *delegate,
-                                                 HdShader const *shader) const;
+    void _UpdateReprName(HdSceneDelegate* delegate, HdDirtyBits *dirtyBits);
 
     virtual HdDirtyBits _GetInitialDirtyBits() const = 0;
     virtual HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const = 0;
@@ -350,38 +307,15 @@ HdRprim::GetExtent(HdSceneDelegate* delegate) const
     return delegate->GetExtent(GetId());
 }
 
-inline TfTokenVector
-HdRprim::GetPrimVarVertexNames(HdSceneDelegate* delegate) const
+inline HdPrimvarDescriptorVector
+HdRprim::GetPrimvarDescriptors(HdSceneDelegate* delegate,
+                               HdInterpolation interpolation) const
 {
-    return delegate->GetPrimVarVertexNames(GetId());
-}
-
-inline TfTokenVector
-HdRprim::GetPrimVarVaryingNames(HdSceneDelegate* delegate) const
-{
-    return delegate->GetPrimVarVaryingNames(GetId());
-}
-
-inline TfTokenVector
-HdRprim::GetPrimVarFacevaryingNames(HdSceneDelegate* delegate) const
-{
-    return delegate->GetPrimVarFacevaryingNames(GetId());
-}
-
-inline TfTokenVector
-HdRprim::GetPrimVarUniformNames(HdSceneDelegate* delegate) const
-{
-    return delegate->GetPrimVarUniformNames(GetId());
-}
-
-inline TfTokenVector
-HdRprim::GetPrimVarConstantNames(HdSceneDelegate* delegate) const
-{
-    return delegate->GetPrimVarConstantNames(GetId());
+    return delegate->GetPrimvarDescriptors(GetId(), interpolation);
 }
 
 inline VtValue
-HdRprim::GetPrimVar(HdSceneDelegate* delegate, const TfToken &name) const
+HdRprim::GetPrimvar(HdSceneDelegate* delegate, const TfToken &name) const
 {
     return delegate->Get(GetId(), name);
 }

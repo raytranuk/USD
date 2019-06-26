@@ -14,11 +14,24 @@ pxr_shared_library(${PXR_PACKAGE}
         usdRi
         usdShade
         usdUtils
+        ${Boost_FILESYSTEM_LIBRARY}
+        ${Boost_SYSTEM_LIBRARY}
+        ${HOUDINI_UI_LIBRARY}
+        ${HOUDINI_OPZ_LIBRARY}
+        ${HOUDINI_OP3_LIBRARY}
+        ${HOUDINI_OP2_LIBRARY}
+        ${HOUDINI_OP1_LIBRARY}
+        ${HOUDINI_SIM_LIBRARY}
+        ${HOUDINI_GEO_LIBRARY}
+        ${HOUDINI_PRM_LIBRARY}
+        ${HOUDINI_UT_LIBRARY}
 
     INCLUDE_DIRS
         ${HOUDINI_INCLUDE_DIRS}
 
     PUBLIC_CLASSES
+        debugCodes
+        error
         GT_Utils
         GU_PackedUSD
         GU_USD
@@ -43,7 +56,6 @@ pxr_shared_library(${PXR_PACKAGE}
         USD_Utils
         USD_XformCache
         USD_VisCache
-        UT_Error
         UT_TypeTraits
         visitor
         groupBaseWrapper
@@ -83,6 +95,17 @@ pxr_shared_library(${PXR_PACKAGE}
         packedUsdWrapper
         pointsWrapper
         instancerWrapper
+
+    PYMODULE_FILES
+        __init__.py
+        treeview.py
+        treemodel.py
+
+    PYMODULE_CPPFILES
+        module.cpp
+        wrapStageCache.cpp
+        wrapStageEdit.cpp
+        wrapStageOpts.cpp
 )
 
 file(GLOB ICON_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "site/icons/*")
@@ -94,12 +117,17 @@ install(
         ${PXR_INSTALL_SUBDIR}/config/Icons
 )
 
+# Disabling temporarily: need to resolve tbb link errors.
+#pxr_build_test(testGusdErrors
+#    LIBRARIES
+#        gusd
+#        tf
+#        ${HOUDINI_UT_LIBRARY}
+#    CPPFILES
+#        testenv/testGusdErrors.cpp
+#)
 
-install( 
-    FILES
-        __init__.py
-        treeview.py
-        treemodel.py       
-    DESTINATION
-        ${PXR_INSTALL_SUBDIR}/scripts/python/gusd
-)
+#pxr_register_test(testGusdErrors
+#    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testGusdErrors"
+#    EXPECTED_RETURN_CODE 0
+#)

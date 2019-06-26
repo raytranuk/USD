@@ -24,8 +24,16 @@
 import sys, argparse, os
 
 from qt import QtWidgets
-from common import Timer
+from common import Timer, Complexities
 from appController import AppController
+
+
+class InvalidUsdviewOption(Exception):
+    """Raised when an invalid Usdview option is found in
+    Launcher.ValidateOptions or any methods which override it.
+    """
+    pass
+
 
 class Launcher(object):
     '''
@@ -52,9 +60,8 @@ class Launcher(object):
             self.RegisterPositionals(parser)
             self.RegisterOptions(parser)
             arg_parse_result = self.ParseOptions(parser)
-            valid = self.ValidateOptions(arg_parse_result)
-            if valid:
-                self.__LaunchProcess(arg_parse_result)
+            self.ValidateOptions(arg_parse_result)
+            self.__LaunchProcess(arg_parse_result)
 
         if arg_parse_result.timing and arg_parse_result.quitAfterStartup:
             totalTimer.PrintTime('open and close usdview')
@@ -113,6 +120,10 @@ class Launcher(object):
                             dest='noRender',
                             help='Display only hierarchy browser')
 
+        parser.add_argument('--noplugins', action='store_true',
+                            dest='noPlugins',
+                            help='Do not load plugins')
+
         parser.add_argument('--unloaded', action='store_true',
                             dest='unloaded',
                             help='Do not load payloads')
@@ -138,8 +149,11 @@ class Launcher(object):
                             dest='lastframe', type=int)
 
         parser.add_argument('--complexity', action='store',
-                            type=float, default=1.0, dest='complexity',
-                            help='A float complexity value in the closed range [1,2]')
+                            type=str, default="low", dest='complexity',
+                            choices=[c.id for c in Complexities.ordered()],
+                            help='Set the initial mesh refinement complexity '
+                                 '(%(default)s).')
+
         parser.add_argument('--quitAfterStartup', action='store_true',
                             dest='quitAfterStartup',
                             help='quit immediately after start up')
@@ -153,16 +167,10 @@ class Launcher(object):
 
     def ValidateOptions(self, arg_parse_result):
         '''
-        Validate and potentially modifies the parsed arguments return True
-        if the UsdView Process can launch.  If a child has overridden
-        ParseOptions, ValidateOptions is an opportunity to move
+        Validate and potentially modifies the parsed arguments. Raises
+        InvalidUsdviewOption if an invalid option is found. If a child has
+        overridden ParseOptions, ValidateOptions is an opportunity to move
         '''
-        if arg_parse_result.complexity < 1.0 or arg_parse_result.complexity > 2.0:
-            newComplexity = max(min(2.0, arg_parse_result.complexity), 1.0)
-            print >> sys.stderr, "WARNING: complexity %.1f is out of range " \
-                "[1.0, 2.0], using %.1f instead" %  \
-                (arg_parse_result.complexity, newComplexity)
-            arg_parse_result.complexity = newComplexity
 
         # split arg_parse_result.populationMask into paths.
         if arg_parse_result.populationMask:
@@ -175,16 +183,14 @@ class Launcher(object):
             from pxr import Sdf
             camPath = Sdf.Path(arg_parse_result.camera)
             if camPath.isEmpty:
-                print >> sys.stderr, "ERROR: invalid camera path - %r" % \
-                                     (arg_parse_result.camera,)
-                return False
+                raise InvalidUsdviewOption("invalid camera path - %r" % \
+                                           (arg_parse_result.camera,))
             if not camPath.IsPrimPath():
-                print >> sys.stderr, "ERROR: invalid camera path - must be a " \
+                raise InvalidUsdviewOption("invalid camera path - must be a " \
                                      "raw prim path, without variant " \
                                      "selections, relational attributes, etc " \
                                      "- got: %r" % \
-                                     (arg_parse_result.camera,)
-                return False
+                                     (arg_parse_result.camera,))
 
             # check if it's a path, or just a name...
             if camPath.name != arg_parse_result.camera:
@@ -201,10 +207,8 @@ class Launcher(object):
                 arg_parse_result.camera = camPath
 
         if arg_parse_result.clearSettings and arg_parse_result.defaultSettings:
-            print >> sys.stderr, "ERROR: cannot supply both --clearsettings " \
-                                 "and --defaultSettings."
-            return False
-        return True
+            raise InvalidUsdviewOption("cannot supply both --clearsettings " \
+                                       "and --defaultsettings.")
 
     def LaunchPreamble(self, arg_parse_result):
         # Initialize concurrency limit as early as possible so that it is

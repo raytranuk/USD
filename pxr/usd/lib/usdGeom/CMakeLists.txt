@@ -8,7 +8,7 @@ pxr_library(usdGeom
         plug
         vt
         sdf
-        tracelite
+        trace
         usd
         work
         ${Boost_PYTHON_LIBRARY}
@@ -21,7 +21,6 @@ pxr_library(usdGeom
         tokens
         bboxCache
         constraintTarget
-        primvar
         xformCache
         basisCurves
         boundable
@@ -45,6 +44,8 @@ pxr_library(usdGeom
         pointBased
         pointInstancer
         points
+        primvar
+        primvarsAPI
         scope
         sphere
         subset
@@ -85,6 +86,7 @@ pxr_library(usdGeom
         wrapPointInstancer.cpp
         wrapPoints.cpp
         wrapPrimvar.cpp
+        wrapPrimvarsAPI.cpp
         wrapScope.cpp
         wrapSphere.cpp
         wrapSubset.cpp
@@ -111,8 +113,9 @@ pxr_test_scripts(
     testenv/testUsdGeomCollectionAPI.py
     testenv/testUsdGeomConstraintTarget.py
     testenv/testUsdGeomConsts.py
-    testenv/test_UsdGeomCurves.py
+    testenv/testUsdGeomCurves.py
     testenv/testUsdGeomFaceSetAPI.py
+    testenv/testUsdGeomMesh.py
     testenv/testUsdGeomMotionAPI.py
     testenv/testUsdGeomNoPlugLoad.py
     testenv/testUsdGeomPointInstancer.py
@@ -122,6 +125,8 @@ pxr_test_scripts(
     testenv/testUsdGeomSubset.py
     testenv/testUsdGeomXformable.py
     testenv/testUsdGeomXformCommonAPI.py
+    testenv/testUsdGeomExtentTransform.py
+    testenv/testUsdGeomComputeAtTime.py
 )
 
 pxr_build_test(testUsdGeomXformCache
@@ -147,6 +152,14 @@ pxr_build_test(testUsdGeomIsA
         usdGeom
     CPPFILES
         testenv/testUsdGeomIsA.cpp
+)
+
+pxr_build_test(testUsdGeomHasAPI
+    LIBRARIES
+        usd
+        usdGeom
+    CPPFILES
+        testenv/testUsdGeomHasAPI.cpp
 )
 
 pxr_install_test_dir(
@@ -186,6 +199,16 @@ pxr_install_test_dir(
 pxr_install_test_dir(
     SRC testenv/testUsdGeomBBoxCache
     DEST testUsdGeomBBoxCache
+)
+
+pxr_install_test_dir(
+    SRC testenv/testUsdGeomExtentTransform
+    DEST testUsdGeomExtentTransform
+)
+
+pxr_install_test_dir(
+    SRC testenv/testUsdGeomComputeAtTime
+    DEST testUsdGeomComputeAtTime
 )
 
 pxr_register_test(testUsdGeomBasisCurves
@@ -234,13 +257,19 @@ pxr_register_test(testUsdGeomCreateAttribute
 
 pxr_register_test(testUsdGeomCurves
     PYTHON
-    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/test_UsdGeomCurves"
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomCurves"
     EXPECTED_RETURN_CODE 0
 )
 
 pxr_register_test(testUsdGeomFaceSetAPI
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomFaceSetAPI"
+    EXPECTED_RETURN_CODE 0
+)
+
+pxr_register_test(testUsdGeomMesh
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomMesh"
     EXPECTED_RETURN_CODE 0
 )
 
@@ -252,6 +281,11 @@ pxr_register_test(testUsdGeomSubset
 
 pxr_register_test(testUsdGeomIsA
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomIsA"
+    EXPECTED_RETURN_CODE 0
+)
+
+pxr_register_test(testUsdGeomHasAPI
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomHasAPI"
     EXPECTED_RETURN_CODE 0
 )
 
@@ -303,5 +337,17 @@ pxr_register_test(testUsdGeomXformCache
 pxr_register_test(testUsdGeomXformCommonAPI
     PYTHON
     COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomXformCommonAPI"
+    EXPECTED_RETURN_CODE 0
+)
+
+pxr_register_test(testUsdGeomExtentTransform
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomExtentTransform"
+    EXPECTED_RETURN_CODE 0
+)
+
+pxr_register_test(testUsdGeomComputeAtTime
+    PYTHON
+    COMMAND "${CMAKE_INSTALL_PREFIX}/tests/testUsdGeomComputeAtTime"
     EXPECTED_RETURN_CODE 0
 )

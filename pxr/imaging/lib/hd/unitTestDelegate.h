@@ -26,8 +26,8 @@
 
 #include "pxr/pxr.h"
 #include "pxr/imaging/hd/api.h"
+#include "pxr/imaging/hd/material.h"
 #include "pxr/imaging/hd/sceneDelegate.h"
-#include "pxr/imaging/hd/shader.h"
 #include "pxr/imaging/hd/tokens.h"
 #include "pxr/imaging/pxOsd/tokens.h"
 
@@ -38,30 +38,29 @@
 #include "pxr/base/gf/matrix4f.h"
 #include "pxr/base/gf/matrix4d.h"
 #include "pxr/base/vt/array.h"
+#include "pxr/base/vt/dictionary.h"
 #include "pxr/base/tf/staticTokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
 
-/// \class Hd_UnitTestDelegate
+/// \class HdUnitTestDelegate
 ///
 /// A simple delegate class for unit test driver.
 ///
-class Hd_UnitTestDelegate : public HdSceneDelegate {
+class HdUnitTestDelegate : public HdSceneDelegate {
 public:
     HD_API
-    Hd_UnitTestDelegate(HdRenderIndex *parentIndex,
+    HdUnitTestDelegate(HdRenderIndex *parentIndex,
                         SdfPath const& delegateID);
 
-    void SetUseInstancePrimVars(bool v) { _hasInstancePrimVars = v; }
+    void SetUseInstancePrimvars(bool v) { _hasInstancePrimvars = v; }
 
     HD_API
     void SetRefineLevel(int level);
 
     HD_API
     void SetVisibility(bool vis);
-
-    enum Interpolation { VERTEX, UNIFORM, CONSTANT, FACEVARYING, VARYING };
 
     // -----------------------------------------------------------------------
 
@@ -88,7 +87,7 @@ public:
                  VtIntArray const &verts,
                  PxOsdSubdivTags const &subdivTags,
                  VtValue const &color,
-                 Interpolation colorInterpolation,
+                 HdInterpolation colorInterpolation,
                  bool guide=false,
                  SdfPath const &instancerId=SdfPath(),
                  TfToken const &scheme=PxOsdOpenSubdivTokens->catmark,
@@ -128,10 +127,19 @@ public:
                                      bool rightHanded=true, bool doubleSided=false,
                                      SdfPath const &instancerId=SdfPath());
 
+    // Add a grid with division x*y and a custom primvar
+    HD_API
+    void AddGridWithPrimvar(SdfPath const &id, int nx, int ny,
+                            GfMatrix4f const &transform,
+                            VtValue const &primvar,
+                            HdInterpolation primvarInterpolation,
+                            bool rightHanded=true, bool doubleSided=false,
+                            SdfPath const &instancerId=SdfPath());
+
     /// Add a triangle, quad and pentagon.
     HD_API
     void AddPolygons(SdfPath const &id, GfMatrix4f const &transform,
-                     Hd_UnitTestDelegate::Interpolation colorInterp,
+                     HdInterpolation colorInterp,
                      SdfPath const &instancerId=SdfPath());
 
     /// Add a subdiv with various tags
@@ -146,19 +154,20 @@ public:
                         VtVec3fArray const &points,
                         VtIntArray const &curveVertexCounts,
                         VtVec3fArray const &normals,
+                        TfToken const &type,
                         TfToken const &basis,
                         VtValue const &color,
-                        Interpolation colorInterpolation,
+                        HdInterpolation colorInterpolation,
                         VtValue const &width,
-                        Interpolation widthInterpolation,
+                        HdInterpolation widthInterpolation,
                         SdfPath const &instancerId=SdfPath());
 
     /// Add a basis curves prim containing two curves
     HD_API
-    void AddCurves(SdfPath const &id, TfToken const &basis,
+    void AddCurves(SdfPath const &id, TfToken const &type, TfToken const &basis,
                    GfMatrix4f const &transform,
-                   Hd_UnitTestDelegate::Interpolation colorInterp=Hd_UnitTestDelegate::CONSTANT,
-                   Hd_UnitTestDelegate::Interpolation widthInterp=Hd_UnitTestDelegate::CONSTANT,
+                   HdInterpolation colorInterp=HdInterpolationConstant,
+                   HdInterpolation widthInterp=HdInterpolationConstant,
                    bool authoredNormals=false,
                    SdfPath const &instancerId=SdfPath());
 
@@ -166,17 +175,17 @@ public:
     void AddPoints(SdfPath const &id,
                    VtVec3fArray const &points,
                    VtValue const &color,
-                   Interpolation colorInterpolation,
+                   HdInterpolation colorInterpolation,
                    VtValue const &width,
-                   Interpolation widthInterpolation,
+                   HdInterpolation widthInterpolation,
                    SdfPath const &instancerId=SdfPath());
 
     /// Add a points prim
     HD_API
     void AddPoints(SdfPath const &id,
                    GfMatrix4f const &transform,
-                   Hd_UnitTestDelegate::Interpolation colorInterp=Hd_UnitTestDelegate::CONSTANT,
-                   Hd_UnitTestDelegate::Interpolation widthInterp=Hd_UnitTestDelegate::CONSTANT,
+                   HdInterpolation colorInterp=HdInterpolationConstant,
+                   HdInterpolation widthInterp=HdInterpolationConstant,
                    SdfPath const &instancerId=SdfPath());
 
     /// Instancer
@@ -198,7 +207,7 @@ public:
     void AddMaterialHydra(SdfPath const &id,
                           std::string const &sourceSurface,
                           std::string const &sourceDisplacement,
-                          HdShaderParamVector const &params);
+                          HdMaterialParamVector const &params);
     
     /// Material
     HD_API
@@ -216,10 +225,6 @@ public:
     /// Example to update a material binding on the fly
     HD_API
     void RebindMaterial(SdfPath const &rprimId, SdfPath const &materialId);
-
-    /// Texture
-    HD_API
-    void AddTexture(SdfPath const& id, GlfTextureRefPtr const& texture);
 
     /// Camera
     HD_API
@@ -273,11 +278,11 @@ public:
     HD_API
     void UpdateRprims(float time);
     HD_API
-    void UpdateInstancerPrimVars(float time);
+    void UpdateInstancerPrimvars(float time);
     HD_API
     void UpdateInstancerPrototypes(float time);
     HD_API
-    void UpdateCurvePrimVarsInterpMode(float time);
+    void UpdateCurvePrimvarsInterpMode(float time);
 
     // ---------------------------------------------------------------------- //
     // utility functions generating test case
@@ -313,17 +318,9 @@ public:
     HD_API
     virtual TfToken GetReprName(SdfPath const &id);
     HD_API
-    virtual TfTokenVector GetPrimVarVertexNames(SdfPath const& id);
-    HD_API
-    virtual TfTokenVector GetPrimVarVaryingNames(SdfPath const& id);
-    HD_API
-    virtual TfTokenVector GetPrimVarFacevaryingNames(SdfPath const& id);
-    HD_API
-    virtual TfTokenVector GetPrimVarUniformNames(SdfPath const& id);
-    HD_API
-    virtual TfTokenVector GetPrimVarConstantNames(SdfPath const& id);
-    HD_API
-    virtual TfTokenVector GetPrimVarInstanceNames(SdfPath const& id);
+    virtual HdPrimvarDescriptorVector
+    GetPrimvarDescriptors(SdfPath const& id,
+                          HdInterpolation interpolation) override;
 
     HD_API
     virtual VtIntArray GetInstanceIndices(SdfPath const& instancerId,
@@ -338,10 +335,10 @@ public:
     HD_API
     virtual std::string GetDisplacementShaderSource(SdfPath const &materialId);    
     HD_API
-    virtual HdShaderParamVector GetSurfaceShaderParams(SdfPath const &materialId);
+    virtual HdMaterialParamVector GetMaterialParams(SdfPath const &materialId);
     HD_API
-    virtual VtValue GetSurfaceShaderParamValue(SdfPath const &materialId, 
-                                               TfToken const &paramName);
+    virtual VtValue GetMaterialParamValue(SdfPath const &materialId, 
+                                          TfToken const &paramName);
     HD_API
     virtual HdTextureResource::ID GetTextureResourceID(SdfPath const& textureId);
     HD_API
@@ -360,7 +357,7 @@ private:
               VtIntArray const &verts,
               PxOsdSubdivTags const &subdivTags,
               VtValue const &color,
-              Interpolation colorInterpolation,
+              HdInterpolation colorInterpolation,
               bool guide,
               bool doubleSided) :
             scheme(scheme), orientation(orientation),
@@ -378,7 +375,7 @@ private:
         VtIntArray verts;
         PxOsdSubdivTags subdivTags;
         VtValue color;
-        Interpolation colorInterpolation;
+        HdInterpolation colorInterpolation;
         bool guide;
         bool doubleSided;
         TfToken reprName;
@@ -388,13 +385,15 @@ private:
         _Curves(VtVec3fArray const &points,
                 VtIntArray const &curveVertexCounts,
                 VtVec3fArray const &normals,
+                TfToken const &type,
                 TfToken const &basis,
                 VtValue const &color,
-                Interpolation colorInterpolation,
+                HdInterpolation colorInterpolation,
                 VtValue const &width,
-                Interpolation widthInterpolation) :
+                HdInterpolation widthInterpolation) :
             points(points), curveVertexCounts(curveVertexCounts), 
             normals(normals),
+            type(type),
             basis(basis),
             color(color), colorInterpolation(colorInterpolation),
             width(width), widthInterpolation(widthInterpolation) { }
@@ -402,28 +401,29 @@ private:
         VtVec3fArray points;
         VtIntArray curveVertexCounts;
         VtVec3fArray normals;
+        TfToken type;
         TfToken basis;
         VtValue color;
-        Interpolation colorInterpolation;
+        HdInterpolation colorInterpolation;
         VtValue width;
-        Interpolation widthInterpolation;
+        HdInterpolation widthInterpolation;
     };
     struct _Points {
         _Points() { }
         _Points(VtVec3fArray const &points,
                 VtValue const &color,
-                Interpolation colorInterpolation,
+                HdInterpolation colorInterpolation,
                 VtValue const &width,
-                Interpolation widthInterpolation) :
+                HdInterpolation widthInterpolation) :
             points(points),
             color(color), colorInterpolation(colorInterpolation),
             width(width), widthInterpolation(widthInterpolation) { }
 
         VtVec3fArray points;
         VtValue color;
-        Interpolation colorInterpolation;
+        HdInterpolation colorInterpolation;
         VtValue width;
-        Interpolation widthInterpolation;
+        HdInterpolation widthInterpolation;
     };
     struct _Instancer {
         _Instancer() { }
@@ -446,7 +446,7 @@ private:
         _MaterialHydra() { }
         _MaterialHydra(std::string const &srcSurface, 
                        std::string const &srcDisplacement,
-                       HdShaderParamVector const &pms)
+                       HdMaterialParamVector const &pms)
             : sourceSurface(srcSurface)
             , sourceDisplacement(srcDisplacement)
             , params(pms) {
@@ -454,14 +454,7 @@ private:
 
         std::string sourceSurface;
         std::string sourceDisplacement;
-        HdShaderParamVector params;
-    };
-    struct _Texture {
-        _Texture() {}
-        _Texture(GlfTextureRefPtr const &tex)
-            : texture(tex) {
-        }
-        GlfTextureRefPtr texture;
+        HdMaterialParamVector params;
     };
     struct _Camera {
         VtDictionary params;
@@ -479,7 +472,6 @@ private:
     std::map<SdfPath, _Instancer> _instancers;
     std::map<SdfPath, _MaterialHydra> _materialsHydra;
     std::map<SdfPath, VtValue> _materials;
-    std::map<SdfPath, _Texture> _textures;
     std::map<SdfPath, _Camera> _cameras;
     std::map<SdfPath, _Light> _lights;
     std::map<SdfPath, _Task> _tasks;
@@ -488,7 +480,7 @@ private:
     typedef std::map<SdfPath, SdfPath> SdfPathMap;
     SdfPathMap _materialBindings;
 
-    bool _hasInstancePrimVars;
+    bool _hasInstancePrimvars;
     int _refineLevel;
     bool _visibility;
     std::map<SdfPath, int> _refineLevels;

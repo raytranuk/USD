@@ -1,6 +1,10 @@
 #usda 1.0
 (
     "WARNING: THIS FILE IS GENERATED.  DO NOT EDIT."
+    customLayerData = {
+        string[] appliedAPISchemas = ["LookAPI"]
+        string[] multipleApplyAPISchemas = []
+    }
 )
 
 class BlindDataObject "BlindDataObject" (
@@ -14,7 +18,7 @@ class BlindDataObject "BlindDataObject" (
     bool katana:visible
 }
 
-class LookAPI "LookAPI" (
+class "LookAPI" (
     doc = "Katana-specific extensions of UsdShadeMaterial."
 )
 {

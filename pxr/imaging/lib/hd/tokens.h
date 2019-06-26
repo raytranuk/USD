@@ -45,12 +45,12 @@ PXR_NAMESPACE_OPEN_SCOPE
     (color)                                     \
     (collection)                                \
     (computeShader)                             \
-    (constantPrimVars)                          \
     (cubic)                                     \
     (culledInstanceIndices)                     \
     (cullStyle)                                 \
     (doubleSided)                               \
     (dispatchBuffer)                            \
+    (dispatchCount)                             \
     (drawDispatch)                              \
     (drawCommandIndex)                          \
     (drawIndirect)                              \
@@ -60,6 +60,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (drawingCoord0)                             \
     (drawingCoord1)                             \
     (drawingCoordI)                             \
+    (edgeIndices)                               \
     (elementCount)                              \
     (extent)                                    \
     (faceColors)                                \
@@ -73,7 +74,6 @@ PXR_NAMESPACE_OPEN_SCOPE
     (instancer)                                 \
     (instancerTransform)                        \
     (instancerTransformInverse)                 \
-    (instancePrimVars)                          \
     (instanceCountInput)                        \
     (instanceIndices)                           \
     (instanceIndexBase)                         \
@@ -83,6 +83,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (layout)                                    \
     (leftHanded)                                \
     (linear)                                    \
+    (materialParams)                            \
     (nonperiodic)                               \
     (normals)                                   \
     (packedNormals)                             \
@@ -92,7 +93,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (points)                                    \
     (pointsIndices)                             \
     (power)                                     \
-    (primVar)                                   \
+    (primvar)                                   \
     (primID)                                    \
     (primitiveParam)                            \
     (proxy)                                     \
@@ -109,7 +110,6 @@ PXR_NAMESPACE_OPEN_SCOPE
     (rightHanded)                               \
     (segmented)                                 \
     (smoothHull)                                \
-    (surfaceShaderParams)                       \
     (subdivTags)                                \
     (taskState)                                 \
     (taskParams)                                \
@@ -143,6 +143,7 @@ PXR_NAMESPACE_OPEN_SCOPE
     (gpuMemoryUsed)                             \
     (instBasisCurvesTopology)                   \
     (instBasisCurvesTopologyRange)              \
+    (instExtComputationDataRange)               \
     (instMeshTopology)                          \
     (instMeshTopologyRange)                     \
     (instPrimvarRange)                          \
@@ -165,16 +166,6 @@ PXR_NAMESPACE_OPEN_SCOPE
     (uboSize)                                   \
     (vboRelocated)
 
-#define HD_GLSL_PROGRAM_TOKENS                  \
-    (smoothNormalsFloatToFloat)                 \
-    (smoothNormalsFloatToDouble)                \
-    (smoothNormalsFloatToPacked)                \
-    (smoothNormalsDoubleToFloat)                \
-    (smoothNormalsDoubleToDouble)               \
-    (smoothNormalsDoubleToPacked)               \
-    (quadrangulateFloat)                        \
-    (quadrangulateDouble)
-
 #define HD_SHADER_TOKENS                        \
     (alphaThreshold)                            \
     (clipPlanes)                                \
@@ -186,15 +177,18 @@ PXR_NAMESPACE_OPEN_SCOPE
     (fragmentShader)                            \
     (geometryShader)                            \
     (lightingBlendAmount)                       \
+    (material)                                  \
     (overrideColor)                             \
     (projectionMatrix)                          \
-    (surfaceShader)                             \
     (tessControlShader)                         \
     (tessEvalShader)                            \
     (tessLevel)                                 \
     (viewport)                                  \
     (vertexShader)                              \
     (wireframeColor)                            \
+    (pointColor)                                \
+    (pointSize)                                 \
+    (pointSelectedSize)                         \
     (worldToViewMatrix)                         \
     (worldToViewInverseMatrix)
 
@@ -211,23 +205,34 @@ PXR_NAMESPACE_OPEN_SCOPE
     /* Sprims */                                \
     (camera)                                    \
     (drawTarget)                                \
-    (shader)                                    \
+    (material)                                  \
     /* Sprims Lights */                         \
-    (light)                                     \
+    (simpleLight)                               \
+    (cylinderLight)                             \
+    (diskLight)                                 \
+    (distantLight)                              \
     (domeLight)                                 \
     (rectLight)                                 \
     (sphereLight)                               \
+    /* Sprims ExtComputations */                \
+    (extComputation)                            \
                                                 \
     /* Bprims */                                \
     (texture)
 
+#define HD_PRIMVAR_ROLE_TOKENS                  \
+    ((none, ""))                                \
+    (color)                                     \
+    (vector)                                    \
+    (normal)                                    \
+    (point)
+
 TF_DECLARE_PUBLIC_TOKENS(HdTokens, HD_API, HD_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(HdPerfTokens, HD_API, HD_PERF_TOKENS);
-TF_DECLARE_PUBLIC_TOKENS(HdGLSLProgramTokens, HD_API, HD_GLSL_PROGRAM_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(HdShaderTokens, HD_API, HD_SHADER_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(HdOptionTokens, HD_API, HD_OPTION_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(HdPrimTypeTokens, HD_API, HD_PRIMTYPE_TOKENS);
-
+TF_DECLARE_PUBLIC_TOKENS(HdPrimvarRoleTokens, HD_API, HD_PRIMVAR_ROLE_TOKENS);
 
 PXR_NAMESPACE_CLOSE_SCOPE
 

@@ -41,7 +41,7 @@
 #include "pxr/usd/sdf/schema.h"
 #include "pxr/usd/sdf/types.h"
 
-#include "pxr/base/tracelite/trace.h"
+#include "pxr/base/trace/trace.h"
 
 #include "pxr/base/arch/errno.h"
 #include "pxr/base/tf/enum.h"
@@ -2040,7 +2040,7 @@ variantset_stmt:
 
 variant_list:
     variant_stmt
-    | variant_stmt variant_list
+    | variant_list variant_stmt
     ;
 
 variant_stmt:

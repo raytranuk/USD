@@ -211,6 +211,12 @@ UsdGeomPrimvar::_GetIndicesAttr(bool create) const
     }
 }
 
+UsdAttribute 
+UsdGeomPrimvar::GetIndicesAttr() const
+{
+    return _GetIndicesAttr(/*create*/ false);
+}
+
 bool 
 UsdGeomPrimvar::SetIndices(const VtIntArray &indices, 
                            UsdTimeCode time) const
@@ -499,26 +505,10 @@ UsdGeomPrimvar::Get(
     return _attr.Get(value, time);
 }
 
-// Sort and remove duplicates.
-static 
-void _SortAndRemoveDupes(std::vector<double> *times) 
-{
-    std::sort(times->begin(), times->end());
-    times->erase(std::unique(times->begin(), times->end()), times->end());
-}
-
 bool 
 UsdGeomPrimvar::GetTimeSamples(std::vector<double>* times) const
 {
-    bool success = _attr.GetTimeSamples(times);
-    if (IsIndexed()) {
-        if (UsdAttribute indicesAttr = _GetIndicesAttr(false)) {
-            success = indicesAttr.GetTimeSamples(times) && success;
-            _SortAndRemoveDupes(times);
-        }
-    }
-
-    return success;
+    return GetTimeSamplesInInterval(GfInterval::GetFullInterval(), times);
 }
 
 bool 
@@ -526,17 +516,14 @@ UsdGeomPrimvar::GetTimeSamplesInInterval(
     const GfInterval& interval,
     std::vector<double>* times) const
 {
-    bool success = _attr.GetTimeSamplesInInterval(interval, times);
-
     if (IsIndexed()) {
         if (UsdAttribute indicesAttr = _GetIndicesAttr(false)) {
-            success = indicesAttr.GetTimeSamplesInInterval(interval, times) && 
-                success;
-            _SortAndRemoveDupes(times);
+            return UsdAttribute::GetUnionedTimeSamplesInInterval(
+                    {_attr, indicesAttr}, interval, times);
         }
     }
 
-    return success;
+    return _attr.GetTimeSamplesInInterval(interval, times);
 }
 
 bool 

@@ -49,7 +49,7 @@ over "GLOBAL" (
                 interpolation between vertices."""
             }
             dictionary faceVarying = {
-                string doc = """Possible value for UsdGeomPrimVar::SetInterpolation.
+                string doc = """Possible value for UsdGeomPrimvar::SetInterpolation.
                 For polygons and subdivision surfaces, four values are
                 interpolated over each face of the mesh. Bilinear interpolation 
                 is used for interpolation between the four values."""
@@ -67,7 +67,9 @@ over "GLOBAL" (
             }
             dictionary collection = {
                 string doc = """This is the namespace prefix used by 
-                UsdGeomCollectionAPI for authoring collections."""
+                the deprecated UsdGeomCollectionAPI for authoring collections.
+                Use UsdTokens->collection instead, which is used by the new
+                collection schema UsdCollectionAPI."""
             }
             dictionary upAxis = {
                 string doc = """Stage-level metadata that encodes a scene's
@@ -109,10 +111,10 @@ class "Imageable" (
     are \\em visibility and \\em purpose, which each provide instructions for
     what geometry should be included for processing by rendering and other
     computations.
-    
-    Imageable also introduces the concept (and API) of geometric
-    "primitive variables", as UsdGeomPrimvar, which interpolate across a 
-    primitive and can override shader inputs.""" 
+
+    <Deprecated> Imageable also provides API for accessing primvars, which
+    have been moved to the UsdGeomPrimvarsAPI schema.  This API is planned
+    to be removed, UsdGeomPrimvarsAPI should be used directly instead."""
     customData = {
         string extraIncludes = """
 #include "pxr/base/gf/bbox3d.h"
@@ -189,6 +191,19 @@ class "Imageable" (
         \\note It is only valid to author the proxyPrim relationship on
         prims whose purpose is "render"."""
     )
+}
+
+class "PrimvarsAPI" (
+    inherits = </APISchemaBase>
+    doc = """UsdGeomPrimvarsAPI encodes geometric "primitive variables",
+    as UsdGeomPrimvar, which interpolate across a primitive's topology,
+    can override shader inputs, and inherit down namespace.""" 
+    customData = {
+        token apiSchemaType = "nonApplied"
+        string extraIncludes = """
+#include "pxr/usd/usdGeom/primvar.h" """
+    }
+) {
 }
 
 class "Xformable" (
@@ -282,7 +297,7 @@ class "Xformable" (
     float3 xformOp:rotateXYZ = (30, 60, 90)
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
-    uniform token xformOpOrder = [ "xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale" ]
+    uniform token[] xformOpOrder = [ "xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale" ]
     \\endcode
 
     The attributes appear in the dictionary order in which USD, by default,
@@ -306,7 +321,7 @@ class "Xformable" (
     float xformOp:rotateZ = 90
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
-    uniform token xformOpOrder = [ "xformOp:translate", "xformOp:rotateZ", "xformOp:rotateY", "xformOp:rotateX", "xformOp:scale" ]
+    uniform token[] xformOpOrder = [ "xformOp:translate", "xformOp:rotateZ", "xformOp:rotateY", "xformOp:rotateX", "xformOp:scale" ]
     \\endcode
     
     Again, note that although we are encoding an XYZ rotation, the three
@@ -320,7 +335,7 @@ class "Xformable" (
     float3 xformOp:scale = (2, 2, 2)
     double3 xformOp:translate = (0, 100, 0)
     double3 xformOp:translate:scalePivot
-    uniform token xformOpOrder = [ "xformOp:translate", "xformOp:rotateXYZ", "xformOp:translate:scalePivot", "xformOp:scale" ]
+    uniform token[] xformOpOrder = [ "xformOp:translate", "xformOp:rotateXYZ", "xformOp:translate:scalePivot", "xformOp:scale" ]
     \\endcode
 
     <b>Paired "Inverted" Ops</b>
@@ -494,7 +509,7 @@ class "Gprim" (
         }
         doc = """Companion to \\em displayColor that specifies opacity, broken
         out as an independent attribute rather than an rgba color, both so that
-        each can be indepedently overridden, and because shaders rarely consume
+        each can be independently overridden, and because shaders rarely consume
         rgba parameters."""
     )
     
@@ -534,6 +549,11 @@ class Cube "Cube" (
     
     The fallback values for Cube, Sphere, Cone, and Cylinder are set so that
     they all pack into the same volume/bounds."""
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
     double size = 2.0 (
         doc = """Indicates the length of each edge of the cube.  If you
@@ -555,6 +575,11 @@ class Sphere "Sphere" (
     
     The fallback values for Cube, Sphere, Cone, and Cylinder are set so that
     they all pack into the same volume/bounds."""
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
     double radius = 1.0 (
         doc = """Indicates the sphere's radius.  If you
@@ -576,6 +601,11 @@ class Cylinder "Cylinder" (
     
     The fallback values for Cube, Sphere, Cone, and Cylinder are set so that
     they all pack into the same volume/bounds."""
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
     double height = 2 (
         doc = """The size of the cylinder's spine along the specified
@@ -605,6 +635,11 @@ class Capsule "Capsule" (
     doc = """Defines a primitive capsule, i.e. a cylinder capped by two half
     spheres, centered at the origin, whose spine is along the specified
     \\em axis."""
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
     double height = 1.0 (
         doc = """The size of the capsule's spine along the specified
@@ -638,6 +673,11 @@ class Cone "Cone" (
     
     The fallback values for Cube, Sphere, Cone, and Cylinder are set so that
     they all pack into the same volume/bounds."""
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
     double height = 2.0 (
         doc = """The size of the cone's spine along the specified
@@ -1375,6 +1415,11 @@ class PointInstancer "PointInstancer" (
     prim itself (or the UsdGeomImageable::ComputeLocalToWorldTransform() of the 
     PointInstancer to put the instance directly into world space)
 
+    If neither *velocities* nor *angularVelocities* are authored, we fallback to
+    standard position and orientation computation logic (using linear
+    interpolation between timeSamples) as described by
+    \\ref UsdGeom_VelocityInterpolation .
+
     \\anchor UsdGeom_PITimeScaling
     <b>Scaling Velocities for Interpolation</b>
     
@@ -1383,11 +1428,38 @@ class PointInstancer "PointInstancer" (
     ( 1.0 / UsdStage::GetTimeCodesPerSecond() ), because velocities are recorded
     in units/second, while we are interpolating in UsdTimeCode ordinates.
     
+    Additionally, if *motion:velocityScale* is authored or inherited (see
+    UsdGeomMotionAPI::ComputeVelocityScale()), it is used to scale both the
+    velocity and angular velocity by a constant value during computation. The
+    *motion:velocityScale* attribute is encoded by UsdGeomMotionAPI.
+
     We provide both high and low-level API's for dealing with the
     transformation as a matrix, both will compute the instance matrices using
     multiple threads; the low-level API allows the client to cache unvarying
     inputs so that they need not be read duplicately when computing over
     time.
+
+    See also \\ref UsdGeom_VelocityInterpolation .
+    
+    \\section UsdGeomPointInstancer_primvars Primvars on PointInstancer
+    
+    \\ref UsdGeomPrimvar "Primvars" authored on a PointInstancer prim should
+    always be applied to each instance with \\em constant interpolation at
+    the root of the instance.  When you are authoring primvars on a 
+    PointInstancer, think about it as if you were authoring them on a 
+    point-cloud (e.g. a UsdGeomPoints gprim).  The same 
+    <A HREF="http://renderman.pixar.com/resources/current/rps/appnote.22.html#classSpecifiers">interpolation rules for points</A> apply here, substituting
+    "instance" for "point".
+    
+    In other words, the (constant) value extracted for each instance
+    from the authored primvar value depends on the authored \\em interpolation
+    and \\em elementSize of the primvar, as follows:
+    \\li <b>constant</b> or <b>uniform</b> : the entire authored value of the
+    primvar should be applied exactly to each instance.
+    \\li <b>varying</b>, <b>vertex</b>, or <b>faceVarying</b>: the first
+    \\em elementSize elements of the authored primvar array should be assigned to
+    instance zero, the second \\em elementSize elements should be assigned to
+    instance one, and so forth.
 
     
     \\section UsdGeomPointInstancer_masking Masking Instances: "Deactivating" and Invising
@@ -1482,28 +1554,14 @@ class PointInstancer "PointInstancer" (
     18     }
     19 }
     \\endcode
-    
-    \\section UsdGeomPointInstancer_primvars Primvars on PointInstancer
-    
-    \\ref UsdGeomPrimvar "Primvars" authored on a PointInstancer prim should
-    always be applied to each instance with \\em constant interpolation at
-    the root of the instance.  When you are authoring primvars on a 
-    PointInstancer, think about it as if you were authoring them on a 
-    point-cloud (e.g. a UsdGeomPoints gprim).  The same 
-    <A HREF="http://renderman.pixar.com/resources/current/rps/appnote.22.html#classSpecifiers">interpolation rules for points</A> apply here, substituting
-    "instance" for "point".
-    
-    In other words, the (constant) value extracted for each instance
-    from the authored primvar value depends on the authored \\em interpolation
-    and \\em elementSize of the primvar, as follows:
-    \\li <b>constant</b> or <b>uniform</b> : the entire authored value of the
-    primvar should be applied exactly to each instance.
-    \\li <b>varying</b>, <b>vertex</b>, or <b>faceVarying</b>: the first
-    \\em elementSize elements of the authored primvar array should be assigned to
-    instance zero, the second \\em elementSize elements should be assigned to
-    instance one, and so forth."""
+    """
 
     inherits = </Boundable>
+    customData = {
+        dictionary extraPlugInfo = {
+            bool implementsComputeExtent = true
+        }
+    }
 ) {
   rel prototypes (
       doc = """<b>Required property</b>. Orders and targets the prototype root 
@@ -1680,6 +1738,7 @@ class Camera "Camera" (
 
 class "GeomModelAPI"
 (
+    inherits = </APISchemaBase>
     customData = {
          string className = "ModelAPI"
          string extraIncludes = """
@@ -1733,11 +1792,8 @@ class "GeomModelAPI"
                    Locate each quad so that it bisects the model extents.
     - \\em box   - Generate a quad normal to each basis direction and negative.
                    Locate each quad on a face of the model extents, facing out.
-    - \\em fromTexture - Generate a quad for each supplied texture by
-                         transforming the range from (-1,-1) to (1,1) by the
-                         inverse of the \\em worldToScreenPos transform, pulled
-                         from texture metadata. The resulting positions are
-                         interpreted as being in model space.
+    - \\em fromTexture - Generate a quad for each supplied texture from
+                         attributes stored in that texture's metadata.
 
     For \\em cross and \\em box mode, the extents are calculated for purposes
     \\em default, \\em proxy, and \\em render, at their earliest authored time.
@@ -1751,12 +1807,18 @@ class "GeomModelAPI"
     \\em model:drawModeColor.
 
     For \\em fromTexture mode, only card faces with valid textures assigned
-    are drawn.
+    are drawn. The geometry is generated by pulling the \\em worldtoscreen
+    attribute out of texture metadata.  This is expected to be a 4x4 matrix
+    mapping the model-space position of the card quad to the clip-space quad
+    with corners (-1,-1,0) and (1,1,0).  The card vertices are generated by
+    transforming the clip-space corners by the inverse of \\em worldtoscreen.
+    Textures are mapped so that (s) and (t) map to (+x) and (+y) in clip space.
+    If the metadata cannot be read in the right format, or the matrix can't
+    be inverted, the card face is not drawn.
 
-    All card faces are drawn and textured as double-sided.
+    All card faces are drawn and textured as single-sided.
 
     \\todo CreatePayload() """
-    inherits = </ModelAPI>
 )
 {
     uniform token model:drawMode (
@@ -1813,6 +1875,7 @@ class "GeomModelAPI"
 
 class "MotionAPI"
 (
+    inherits = </APISchemaBase>
     doc = """UsdGeomMotionAPI encodes data that can live on any prim that
     may affect computations involving:
     - computed motion for motion blur

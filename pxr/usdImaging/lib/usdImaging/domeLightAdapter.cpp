@@ -23,12 +23,15 @@
 //
 #include "pxr/usdImaging/usdImaging/domeLightAdapter.h"
 #include "pxr/usdImaging/usdImaging/delegate.h"
+#include "pxr/usdImaging/usdImaging/indexProxy.h"
 #include "pxr/usdImaging/usdImaging/tokens.h"
 
 #include "pxr/imaging/hd/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+
+bool _IsEnabledSceneLights();
 
 TF_REGISTRY_FUNCTION(TfType)
 {
@@ -44,7 +47,8 @@ UsdImagingDomeLightAdapter::~UsdImagingDomeLightAdapter()
 bool
 UsdImagingDomeLightAdapter::IsSupported(UsdImagingIndexProxy const* index) const
 {
-    return index->IsSprimTypeSupported(HdPrimTypeTokens->domeLight);
+    return _IsEnabledSceneLights() &&
+           index->IsSprimTypeSupported(HdPrimTypeTokens->domeLight);
 }
 
 SdfPath

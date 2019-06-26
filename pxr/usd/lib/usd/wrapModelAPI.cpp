@@ -55,7 +55,7 @@ void wrapUsdModelAPI()
 {
     typedef UsdModelAPI This;
 
-    class_<This, bases<UsdSchemaBase> >
+    class_<This, bases<UsdAPISchemaBase> >
         cls("ModelAPI");
 
     cls
@@ -73,6 +73,10 @@ void wrapUsdModelAPI()
         .def("IsTyped",
             static_cast<bool (*)(void)>( [](){ return This::IsTyped; } ))
         .staticmethod("IsTyped")
+
+        .def("IsApplied", 
+            static_cast<bool (*)(void)>( [](){ return This::IsApplied; } ))
+        .staticmethod("IsApplied")
 
         .def("GetSchemaAttributeNames",
              &This::GetSchemaAttributeNames,

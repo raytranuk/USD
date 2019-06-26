@@ -32,10 +32,12 @@
 #include "pxr/imaging/glf/image.h"
 #include "pxr/imaging/glf/utils.h"
 
+#include "pxr/imaging/hf/perfLog.h"
+
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/envSetting.h"
 
-#include "pxr/base/tracelite/trace.h"
+#include "pxr/base/trace/trace.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
@@ -170,8 +172,8 @@ GlfDrawTarget::AddAttachment( std::string const & name,
 
 
         TF_VERIFY( attachment->GetGlTextureName() > 0 ,
-                   std::string("Attachment \""+name+"\" was not added "
-                       "and cannot be bound in MatDisplayMaterial").c_str());
+                   "Attachment \"%s\" was not added "
+                       "and cannot be bound in MatDisplayMaterial", name.c_str());
 
         _BindAttachment( attachment );
 
@@ -396,6 +398,8 @@ GlfDrawTarget::Bind()
     if (++_bindDepth != 1) {
         return;
     }
+    
+    GLF_GROUP_FUNCTION();
 
     _SaveBindingState();
 
@@ -430,6 +434,7 @@ GlfDrawTarget::Unbind()
     if (--_bindDepth != 0) {
         return;
     }
+    GLF_GROUP_FUNCTION();
 
     _RestoreBindingState();
 
@@ -455,6 +460,8 @@ GlfDrawTarget::_Resolve()
 void
 GlfDrawTarget::Resolve()
 {
+    GLF_GROUP_FUNCTION();
+    
     if (HasMSAA()) {
         _SaveBindingState();
         _Resolve();
@@ -466,6 +473,8 @@ GlfDrawTarget::Resolve()
 void
 GlfDrawTarget::Resolve(const std::vector<GlfDrawTarget*>& drawTargets)
 {
+    GLF_GROUP_FUNCTION();
+    
     bool anyResolved = false;
 
     for(GlfDrawTarget* dt : drawTargets) {
@@ -648,6 +657,8 @@ GlfDrawTarget::Attachment::~Attachment()
 void
 GlfDrawTarget::Attachment::_GenTexture()
 {
+    HF_MALLOC_TAG_FUNCTION();
+
     GLenum internalFormat = _internalFormat;
     GLenum type = _type;
     size_t memoryUsed = 0;
@@ -722,7 +733,7 @@ GlfDrawTarget::Attachment::_GenTexture()
 
     glBindTexture( GL_TEXTURE_2D, 0 );
 
-    memoryUsed += baseImageSize * _numSamples;
+    memoryUsed += baseImageSize;
 
     _SetMemoryUsed(memoryUsed);
 

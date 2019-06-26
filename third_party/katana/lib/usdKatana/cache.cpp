@@ -34,7 +34,7 @@
 #include "pxr/usd/sdf/layer.h"
 #include "pxr/usd/sdf/path.h"
 #include "pxr/usd/sdf/attributeSpec.h"
-#include "pxr/base/tracelite/trace.h"
+#include "pxr/base/trace/trace.h"
 #include "pxr/usd/usd/prim.h"
 #include "pxr/usd/usd/stageCacheContext.h"
 
@@ -309,6 +309,119 @@ UsdKatanaCache::_FindOrCreateSessionLayer(
                 };
             }
         }
+        
+
+
+        FnAttribute::GroupAttribute metadataAttr =
+                sessionAttr.getChildByName("metadata");
+        for (int64_t i = 0, e = metadataAttr.getNumberOfChildren(); i != e;
+                ++i)
+        {            
+            std::string entryName = FnAttribute::DelimiterDecode(
+                    metadataAttr.getChildName(i));
+            
+            FnAttribute::GroupAttribute entryAttr =
+                    metadataAttr.getChildByIndex(i);            
+            
+            if (!pystring::startswith(entryName, rootLocationPlusSlash))
+            {
+                continue;
+            }
+            
+            std::string primPath = pystring::slice(entryName,
+                    rootLocation.size());
+            
+            SdfPath varSelPath(primPath);
+            
+            SdfPrimSpecHandle spec = SdfCreatePrimInLayer(
+                        sessionLayer, varSelPath.GetPrimPath());
+            
+            if (!spec)
+            {
+                continue;
+            }
+            
+            
+            // Currently support only metadata at the prim level
+            FnAttribute::GroupAttribute primEntries =
+                    entryAttr.getChildByName("prim");
+            for (int64_t i = 0, e = primEntries.getNumberOfChildren(); i < e; ++i)
+            {
+                FnAttribute::GroupAttribute attrDefGrp =
+                        primEntries.getChildByIndex(i);
+                std::string attrName = primEntries.getChildName(i);
+                
+                std::string typeName  = FnAttribute::StringAttribute(
+                        attrDefGrp.getChildByName("type")).getValue("", false);
+                if (typeName == "SdfInt64ListOp")
+                {
+                    FnAttribute::IntAttribute valueAttr;
+                    
+                    SdfInt64ListOp listOp;
+                    std::vector<int64_t> itemList;
+                    
+                    auto convertFnc = [](
+                            FnAttribute::IntAttribute intAttr,
+                            std::vector<int64_t> & outputItemList)
+                    {
+                        outputItemList.clear();
+                        if (intAttr.getNumberOfValues() == 0)
+                        {
+                            return;
+                        }
+                        
+                        auto sample = intAttr.getNearestSample(0);
+                        outputItemList.reserve(sample.size());
+                        outputItemList.insert(outputItemList.end(),
+                                sample.begin(), sample.end());
+                    };
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.explicit");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetExplicitItems(itemList);
+                    }
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.added");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetAddedItems(itemList);
+                    }
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.deleted");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetDeletedItems(itemList);
+                    }
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.ordered");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetOrderedItems(itemList);
+                    }
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.prepended");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetPrependedItems(itemList);
+                    }
+                    
+                    valueAttr = attrDefGrp.getChildByName("listOp.appended");
+                    if (valueAttr.isValid())
+                    {
+                        convertFnc(valueAttr, itemList);
+                        listOp.SetAppendedItems(itemList);
+                    }
+                    
+                    spec->SetInfo(TfToken(attrName), VtValue(listOp));
+                }
+            }
+        }
 
         FnAttribute::StringAttribute dynamicSublayersAttr =
                 sessionAttr.getChildByName("subLayers");
@@ -557,14 +670,12 @@ UsdStageRefPtr UsdKatanaCache::GetStage(
     const std::string contextPath = givenAbsPath ? 
                                     TfGetPathName(fileName) : ArchGetCwd();
 
-    std::string path = !givenAbsPath ? _ResolvePath(fileName) : fileName;
-
     TF_DEBUG(USDKATANA_CACHE_STAGE).Msg(
             "{USD STAGE CACHE} Creating and caching UsdStage for "
             "given filePath @%s@, which resolves to @%s@\n", 
-            fileName.c_str(), path.c_str());
+            fileName.c_str(), _ResolvePath(fileName).c_str());
 
-    if (SdfLayerRefPtr rootLayer = SdfLayer::FindOrOpen(path)) {
+    if (SdfLayerRefPtr rootLayer = SdfLayer::FindOrOpen(fileName)) {
         SdfLayerRefPtr& sessionLayer =
                 _FindOrCreateSessionLayer(sessionAttr, sessionRootLocation);
 
@@ -636,14 +747,12 @@ UsdKatanaCache::GetUncachedStage(std::string const& fileName,
     const std::string contextPath = givenAbsPath ? 
                                     TfGetPathName(fileName) : ArchGetCwd();
 
-    std::string path = !givenAbsPath ? _ResolvePath(fileName) : fileName;
-
     TF_DEBUG(USDKATANA_CACHE_STAGE).Msg(
             "{USD STAGE CACHE} Creating UsdStage for "
             "given filePath @%s@, which resolves to @%s@\n", 
-            fileName.c_str(), path.c_str());
+            fileName.c_str(), _ResolvePath(fileName).c_str());
 
-    if (SdfLayerRefPtr rootLayer = SdfLayer::FindOrOpen(path)) {
+    if (SdfLayerRefPtr rootLayer = SdfLayer::FindOrOpen(fileName)) {
         SdfLayerRefPtr& sessionLayer =
                 _FindOrCreateSessionLayer(sessionAttr, sessionRootLocation);
         
@@ -682,6 +791,15 @@ UsdKatanaCache::GetUncachedStage(std::string const& fileName,
     
     
 }
+
+
+void UsdKatanaCache::FlushStage(const UsdStageRefPtr & stage)
+{
+    UsdStageCache& stageCache = UsdUtilsStageCache::Get();
+    
+    stageCache.Erase(stage);
+}
+
 
 UsdImagingGLSharedPtr const& 
 UsdKatanaCache::GetRenderer(UsdStageRefPtr const& stage,
@@ -765,6 +883,8 @@ SdfLayerRefPtr UsdKatanaCache::FindSessionLayer(
 
 SdfLayerRefPtr UsdKatanaCache::FindSessionLayer(
     const std::string& cacheKey) {
+    boost::upgrade_lock<boost::upgrade_mutex>
+                readerLock(UsdKatanaGetSessionCacheLock());
     const auto& it = _sessionKeyCache.find(cacheKey);
     if (it != _sessionKeyCache.end()) {
         return it->second;

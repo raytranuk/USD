@@ -58,10 +58,18 @@ PXR_NAMESPACE_OPEN_SCOPE
 /// Use UsdTokens like so:
 ///
 /// \code
-///     gprim.GetMyTokenValuedAttr().Set(UsdTokens->clipActive);
+///     gprim.GetMyTokenValuedAttr().Set(UsdTokens->apiSchemas);
 /// \endcode
 struct UsdTokensType {
     USD_API UsdTokensType();
+    /// \brief "apiSchemas"
+    /// 
+    ///  A listop metadata containing the API schemas which have been applied to this prim, using the Apply() method on the particular schema class.  
+    const TfToken apiSchemas;
+    /// \brief "apiSchemaType"
+    /// 
+    ///  Custom-data key authored on an API schema class-prim in the  schema definition, to define the type of API schema. Possible  values include "nonApplied", "singleApply" and "multipleApply".  
+    const TfToken apiSchemaType;
     /// \brief "clipActive"
     /// 
     ///  List of pairs (time, clip index) indicating the time on the stage at which the clip specified by the clip index is active. For instance, a value of [(0.0, 0), (20.0, 1)] indicates that clip 0 is active at time 0 and clip 1 is active at time 20. 
@@ -130,6 +138,22 @@ struct UsdTokensType {
     /// 
     ///  Possible value for the "expansionRule" attribute of a  collection. 
     const TfToken explicitOnly;
+    /// \brief "isPrivateApply"
+    /// 
+    ///  Custom-data key authored on an applied API schema class-prim  in the schema definition to indicate whether the auto-generated Apply method should be public or private. 
+    const TfToken isPrivateApply;
+    /// \brief "multipleApply"
+    /// 
+    ///  Possible value for customData["apiSchemaType"] on an API schema class prim.  
+    const TfToken multipleApply;
+    /// \brief "nonApplied"
+    /// 
+    ///  Possible value for customData["apiSchemaType"] on an API schema class prim.  
+    const TfToken nonApplied;
+    /// \brief "singleApply"
+    /// 
+    ///  Possible value for customData["apiSchemaType"] on an API schema class prim.  
+    const TfToken singleApply;
     /// A vector of all of the tokens listed above.
     const std::vector<TfToken> allTokens;
 };

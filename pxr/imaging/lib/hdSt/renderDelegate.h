@@ -63,6 +63,8 @@ public:
     HDST_API
     virtual HdRenderPassSharedPtr CreateRenderPass(HdRenderIndex *index,
                 HdRprimCollection const& collection) override;
+    HDST_API
+    virtual HdRenderPassStateSharedPtr CreateRenderPassState() const override;
 
     HDST_API
     virtual HdInstancer *CreateInstancer(HdSceneDelegate *delegate,
@@ -98,6 +100,11 @@ public:
     HDST_API
     virtual void CommitResources(HdChangeTracker *tracker) override;
 
+    // Returns whether or not HdStRenderDelegate can run on the current
+    // hardware.
+    HDST_API
+    static bool IsSupported();
+
 private:
     static const TfTokenVector SUPPORTED_RPRIM_TYPES;
     static const TfTokenVector SUPPORTED_SPRIM_TYPES;
@@ -108,7 +115,7 @@ private:
     static std::atomic_int _counterResourceRegistry;
     static HdStResourceRegistrySharedPtr _resourceRegistry;
 
-    HdSprim *_CreateFallbackShaderPrim();
+    HdSprim *_CreateFallbackMaterialPrim();
 
     HdStRenderDelegate(const HdStRenderDelegate &)             = delete;
     HdStRenderDelegate &operator =(const HdStRenderDelegate &) = delete;

@@ -23,12 +23,15 @@
 //
 #include "pxr/usdImaging/usdImaging/rectLightAdapter.h"
 #include "pxr/usdImaging/usdImaging/delegate.h"
+#include "pxr/usdImaging/usdImaging/indexProxy.h"
 #include "pxr/usdImaging/usdImaging/tokens.h"
 
 #include "pxr/imaging/hd/tokens.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+
+bool _IsEnabledSceneLights();
 
 TF_REGISTRY_FUNCTION(TfType)
 {
@@ -44,7 +47,8 @@ UsdImagingRectLightAdapter::~UsdImagingRectLightAdapter()
 bool
 UsdImagingRectLightAdapter::IsSupported(UsdImagingIndexProxy const* index) const
 {
-    return index->IsSprimTypeSupported(HdPrimTypeTokens->rectLight);
+    return _IsEnabledSceneLights() &&
+           index->IsSprimTypeSupported(HdPrimTypeTokens->rectLight);
 }
 
 SdfPath

@@ -24,13 +24,15 @@
 #ifndef USDIMAGING_MATERIALADAPTER_H
 #define USDIMAGING_MATERIALADAPTER_H
 
+/// \file usdImaging/materialAdapter.h
+
 #include "pxr/pxr.h"
 #include "pxr/usdImaging/usdImaging/primAdapter.h"
 
 PXR_NAMESPACE_OPEN_SCOPE
 
+struct HdMaterialNetworkMap;
 
-class HdMaterialNodes;
 
 /// \class UsdImagingMaterialAdapter
 /// \brief Provides information that can be used to generate a material.
@@ -66,7 +68,7 @@ public:
                                   SdfPath const& cachePath,
                                   HdDirtyBits* timeVaryingBits,
                                   UsdImagingInstancerContext const* 
-                                      instancerContext = NULL);
+                                      instancerContext = NULL) const;
 
 
     /// Thread Safe.
@@ -76,13 +78,13 @@ public:
                                UsdTimeCode time,
                                HdDirtyBits requestedBits,
                                UsdImagingInstancerContext const* 
-                                   instancerContext = NULL);
+                                   instancerContext = NULL) const;
 
     // ---------------------------------------------------------------------- //
     /// \name Change Processing 
     // ---------------------------------------------------------------------- //
 
-    /// Returns a bit mask of attributes to be udpated, or
+    /// Returns a bit mask of attributes to be updated, or
     /// HdChangeTracker::AllDirty if the entire prim must be resynchronized.
     USDIMAGING_API
     virtual HdDirtyBits ProcessPropertyChange(UsdPrim const& prim,
@@ -101,8 +103,8 @@ protected:
                              UsdImagingIndexProxy* index) final;
 
 private:
-    void _GetMaterialNodes(UsdPrim const &prim, 
-                           HdMaterialNodes *materialNodes);
+    void _GetMaterialNetworkMap(UsdPrim const &prim, 
+                                HdMaterialNetworkMap *materialNetworkMap) const;
 };
 
 

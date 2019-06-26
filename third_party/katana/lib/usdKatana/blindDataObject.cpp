@@ -34,7 +34,7 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_REGISTRY_FUNCTION(TfType)
 {
     TfType::Define<UsdKatanaBlindDataObject,
-        TfType::Bases< UsdSchemaBase > >();
+        TfType::Bases< UsdTyped > >();
     
     // Register the usd prim typename as an alias under UsdSchemaBase. This
     // enables one to call
@@ -171,7 +171,7 @@ UsdKatanaBlindDataObject::GetSchemaAttributeNames(bool includeInherited)
     };
     static TfTokenVector allNames =
         _ConcatenateAttributeNames(
-            UsdSchemaBase::GetSchemaAttributeNames(true),
+            UsdTyped::GetSchemaAttributeNames(true),
             localNames);
 
     if (includeInherited)
@@ -309,13 +309,6 @@ UsdKatanaBlindDataObject::GetKbdAttribute(
 {
     std::string fullName = _MakeKbdAttrName(katanaAttrName);
     return GetPrim().GetAttribute(TfToken(fullName));
-}
-
-bool
-UsdKatanaBlindDataObject::_IsCompatible(const UsdPrim &prim) const
-{
-    // HasA schemas compatible with all types for now.
-    return true;
 }
 
 bool

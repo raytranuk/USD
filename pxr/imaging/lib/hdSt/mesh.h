@@ -40,13 +40,16 @@
 PXR_NAMESPACE_OPEN_SCOPE
 
 
+class HdStDrawItem;
 class HdSceneDelegate;
+class HdStMaterial;
 
 typedef boost::shared_ptr<class Hd_VertexAdjacency> Hd_VertexAdjacencySharedPtr;
 typedef boost::shared_ptr<class HdSt_MeshTopology> HdSt_MeshTopologySharedPtr;
 typedef boost::shared_ptr<class HdBufferSource> HdBufferSourceSharedPtr;
 typedef boost::shared_ptr<class HdStResourceRegistry>
     HdStResourceRegistrySharedPtr;
+typedef boost::shared_ptr<class HdStShaderCode> HdStShaderCodeSharedPtr;
 
 /// A subdivision surface or poly-mesh object.
 ///
@@ -70,62 +73,61 @@ public:
                       TfToken const   &reprName,
                       bool             forcedRepr) override;
 
+    /// Topology (member) getter
+    HDST_API
+    virtual HdMeshTopologySharedPtr GetTopology() const override;
+
     /// Returns whether packed (10_10_10 bits) normals to be used
     HDST_API
     static bool IsEnabledPackedNormals();
 
 protected:
-    virtual HdReprSharedPtr const &
-        _GetRepr(HdSceneDelegate *sceneDelegate,
-                 TfToken const &reprName,
-                 HdDirtyBits *dirtyBitsState) override;
+    virtual void _UpdateRepr(HdSceneDelegate *sceneDelegate,
+                             TfToken const &reprName,
+                             HdDirtyBits *dirtyBitsState) override;
 
-    virtual
-    HdShaderCodeSharedPtr _GetShaderCode(HdSceneDelegate *sceneDelegate,
-                                         HdShader const *shader) const override;
+    HdBufferArrayRangeSharedPtr
+    _GetSharedPrimvarRange(uint64_t primvarId,
+                HdBufferSpecVector const &bufferSpecs,
+                HdBufferArrayRangeSharedPtr const &existing,
+                bool * isFirstInstance,
+                HdStResourceRegistrySharedPtr const &resourceRegistry) const;
 
-    HdDirtyBits _PropagateDirtyBits(
-        HdDirtyBits dirtyBits);
-
-    bool _UsePtexIndices(const HdRenderIndex &renderIndex) const;
+    bool _UseQuadIndices(const HdRenderIndex &renderIndex,
+                         HdSt_MeshTopologySharedPtr const & topology) const;
 
     void _UpdateDrawItem(HdSceneDelegate *sceneDelegate,
-                         HdDrawItem *drawItem,
+                         HdStDrawItem *drawItem,
                          HdDirtyBits *dirtyBits,
                          HdMeshReprDesc desc,
                          bool requireSmoothNormals);
 
-    void _UpdateReprGeometricShader(HdSceneDelegate *sceneDelegate,
-                                    _MeshReprConfig::DescArray const &descs,
-                                    HdReprSharedPtr repr);
-
     void _UpdateDrawItemGeometricShader(HdSceneDelegate *sceneDelegate,
-                                        HdDrawItem *drawItem,
+                                        HdStDrawItem *drawItem,
                                         const HdMeshReprDesc &desc);
 
     void _PopulateTopology(HdSceneDelegate *sceneDelegate,
-                           HdDrawItem *drawItem,
+                           HdStDrawItem *drawItem,
                            HdDirtyBits *dirtyBits,
                            HdMeshReprDesc desc);
 
     void _PopulateAdjacency(HdStResourceRegistrySharedPtr const &resourceRegistry);
 
-    void _PopulateVertexPrimVars(HdSceneDelegate *sceneDelegate,
-                                 HdDrawItem *drawItem,
+    void _PopulateVertexPrimvars(HdSceneDelegate *sceneDelegate,
+                                 HdStDrawItem *drawItem,
                                  HdDirtyBits *dirtyBits,
                                  bool requireSmoothNormals);
 
-    void _PopulateFaceVaryingPrimVars(HdSceneDelegate *sceneDelegate,
-                                      HdDrawItem *drawItem,
+    void _PopulateFaceVaryingPrimvars(HdSceneDelegate *sceneDelegate,
+                                      HdStDrawItem *drawItem,
                                       HdDirtyBits *dirtyBits,
                                       HdMeshReprDesc desc);
 
-    void _PopulateElementPrimVars(HdSceneDelegate *sceneDelegate,
-                                  HdDrawItem *drawItem,
-                                  HdDirtyBits *dirtyBits,
-                                  TfTokenVector const &primVarNames);
+    void _PopulateElementPrimvars(HdSceneDelegate *sceneDelegate,
+                                  HdStDrawItem *drawItem,
+                                  HdDirtyBits *dirtyBits);
 
-    int _GetRefineLevelForDesc(HdMeshReprDesc desc);
+    int _GetRefineLevelForDesc(HdMeshReprDesc desc) const;
 
     virtual HdDirtyBits _GetInitialDirtyBits() const override;
     virtual HdDirtyBits _PropagateDirtyBits(HdDirtyBits bits) const override;
@@ -137,7 +139,7 @@ private:
     enum DrawingCoord {
         HullTopology = HdDrawingCoord::CustomSlotsBegin,
         PointsTopology,
-        InstancePrimVar // has to be at the very end
+        InstancePrimvar // has to be at the very end
     };
 
     enum DirtyBits : HdDirtyBits {

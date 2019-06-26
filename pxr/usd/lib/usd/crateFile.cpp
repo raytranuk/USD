@@ -59,7 +59,7 @@
 #include "pxr/base/tf/safeOutputFile.h"
 #include "pxr/base/tf/stringUtils.h"
 #include "pxr/base/tf/token.h"
-#include "pxr/base/tracelite/trace.h"
+#include "pxr/base/trace/trace.h"
 #include "pxr/base/vt/dictionary.h"
 #include "pxr/base/vt/value.h"
 #include "pxr/base/work/arenaDispatcher.h"
@@ -106,6 +106,13 @@ TF_DEFINE_ENV_SETTING(
     "fetches of the given size instead.  If necessary the setting value is "
     "rounded up to the next whole multiple of the system's page size "
     "(typically 4 KB).");
+
+TF_DEFINE_ENV_SETTING(
+    USDC_ENABLE_ZERO_COPY_ARRAYS, true,
+    "Enable the zero-copy optimization for numeric array values whose in-file "
+    "representation matches the in-memory representation.  With this "
+    "optimization, we create VtArrays that point directly into the memory "
+    "mapped region rather than copying the data to heap buffers.");
 
 static int _GetMMapPrefetchKB()
 {
@@ -240,6 +247,10 @@ using std::unordered_map;
 using std::vector;
 
 // Version history:
+// 0.7.0: Array sizes written as 64 bit ints.
+// 0.6.0: Compressed (scalar) floating point arrays that are either all ints or
+//        can be represented efficiently with a lookup table.
+// 0.5.0: Compressed (u)int & (u)int64 arrays, arrays no longer store '1' rank.
 // 0.4.0: Compressed structural sections.
 // 0.3.0: (broken, unused)
 // 0.2.0: Added support for prepend and append fields of SdfListOp.
@@ -247,7 +258,7 @@ using std::vector;
 //        See _PathItemHeader_0_0_1.
 // 0.0.1: Initial release.
 constexpr uint8_t USDC_MAJOR = 0;
-constexpr uint8_t USDC_MINOR = 4;
+constexpr uint8_t USDC_MINOR = 7;
 constexpr uint8_t USDC_PATCH = 0;
 
 struct CrateFile::Version
@@ -407,13 +418,89 @@ struct _ListOpHeader {
 };
 template <> struct _IsBitwiseReadWrite<_ListOpHeader> : std::true_type {};
 
+CrateFile::_FileMapping::ZeroCopySource *
+CrateFile::_FileMapping::AddRangeReference(void *addr, size_t numBytes)
+{
+    auto iresult = _outstandingRanges.emplace(this, addr, numBytes);
+    // If we take the source's count from 0 -> 1, add a reference to the
+    // mapping.
+    if (iresult.first->NewRef()) {
+        intrusive_ptr_add_ref(this);
+    }
+    return &(*iresult.first);
+}
+
+// The 'start' arg must be volatile so we actually emit the "noop" store
+// operations that "write" to the pages.
+static void
+TouchPages(char volatile *start, size_t numPages)
+{
+    while (numPages--) {
+        *start = *start; // Don't change content, but cause a write.  This
+                         // forces the VM to detach the page from its mapped
+                         // file backing and make it swap-backed instead
+                         // (copy-on-write).  This is sometimes called a "silent
+                         // store".  No current hw architecture "optimizes out"
+                         // silent stores.
+        start += PAGESIZE;
+    }
+}
+
+void
+CrateFile::_FileMapping::DetachReferencedRanges()
+{
+    // At this moment, we're guaranteed that this _FileMapping object won't be
+    // destroyed because the calling CrateFile object owns a reference.  We're
+    // also guaranteed that no ZeroCopySource objects' reference counts will
+    // increase (and in particular go from 0 to 1) since the layer is being
+    // destroyed.  Similarly no new _outstandingRanges can be created.
+    for (auto const &zeroCopy: _outstandingRanges) {
+        // This is racy, but benign.  If we see a nonzero count that's
+        // concurrently being zeroed, we just do possibly unneeded work.  The
+        // crucial thing is that we'll never see a zero count that could
+        // possibly become nonzero again.
+        if (zeroCopy.IsInUse()) {
+            // Calculate the page-aligned start address and the number of pages
+            // we need to touch.
+            auto addrAsInt = reinterpret_cast<uintptr_t>(zeroCopy.GetAddr());
+            int64_t pageStart = addrAsInt / PAGESIZE;
+            int64_t pageEnd =
+                ((addrAsInt + zeroCopy.GetNumBytes() - 1) / PAGESIZE) + 1;
+            TouchPages(reinterpret_cast<char *>(pageStart * PAGESIZE),
+                       pageEnd - pageStart);
+        }
+    }
+}
+
+CrateFile::_FileMapping::ZeroCopySource::ZeroCopySource(
+    CrateFile::_FileMapping *m,
+    void *addr, size_t numBytes)
+    : Vt_ArrayForeignDataSource(_Detached)
+    , _mapping(m)
+    , _addr(addr)
+    , _numBytes(numBytes) {}
+
+bool CrateFile::_FileMapping::ZeroCopySource::operator==(
+    ZeroCopySource const &other) const {
+    return _mapping == other._mapping &&
+        _addr == other._addr && _numBytes == other._numBytes;
+}
+
+void CrateFile::_FileMapping::ZeroCopySource::_Detached(
+    Vt_ArrayForeignDataSource *selfBase) {
+    auto *self = static_cast<ZeroCopySource *>(selfBase);
+    intrusive_ptr_release(self->_mapping);
+}
+
+template <class FileMappingPtr>
 struct _MmapStream {
+    // Mmap streams support zero-copy arrays; direct references into file-mapped
+    // memory.
+    static constexpr bool SupportsZeroCopy = true;
     
-    explicit _MmapStream(ArchConstFileMapping const &mapStart,
-                         char *debugPageMap)
-        : _cur(mapStart.get())
-        , _mapStart(mapStart.get())
-        , _length(ArchGetFileMappingLength(mapStart))
+    explicit _MmapStream(FileMappingPtr const &mapping, char *debugPageMap)
+        : _cur(mapping->GetMapStart())
+        , _mapping(mapping)
         , _debugPageMap(debugPageMap)
         , _prefetchKB(_GetMMapPrefetchKB()) {}
 
@@ -424,20 +511,22 @@ struct _MmapStream {
     
     inline void Read(void *dest, size_t nBytes) {
         if (ARCH_UNLIKELY(_debugPageMap)) {
-            int64_t pageStart = (_cur - _mapStart) / PAGESIZE;
-            int64_t pageEnd = ((_cur + nBytes - 1 - _mapStart) / PAGESIZE) + 1;
-            memset(_debugPageMap + pageStart, 1, pageEnd-pageStart);
+            auto mapStart = _mapping->GetMapStart();
+            int64_t pageStart = (_cur - mapStart) / PAGESIZE;
+            int64_t pageEnd = ((_cur + nBytes - 1 - mapStart) / PAGESIZE) + 1;
+            memset(_debugPageMap + pageStart, 1, pageEnd - pageStart);
         }
 
         if (_prefetchKB) {
             // Custom aligned chunk "prefetch".
+            auto mapStart = _mapping->GetMapStart();
             const auto chunkBytes = _prefetchKB * 1024;
-            auto firstChunk = (_cur-_mapStart) / chunkBytes;
-            auto lastChunk = ((_cur-_mapStart) + nBytes) / chunkBytes;
+            auto firstChunk = (_cur-mapStart) / chunkBytes;
+            auto lastChunk = ((_cur-mapStart) + nBytes) / chunkBytes;
             
-            char const *beginAddr = _mapStart + firstChunk * chunkBytes;
-            char const *endAddr =
-                _mapStart + std::min(_length, (lastChunk + 1) * chunkBytes);
+            char const *beginAddr = mapStart + firstChunk * chunkBytes;
+            char const *endAddr = mapStart + std::min(
+                _mapping->GetLength(), (lastChunk + 1) * chunkBytes);
             
             ArchMemAdvise(reinterpret_cast<void *>(
                               const_cast<char *>(beginAddr)),
@@ -448,21 +537,43 @@ struct _MmapStream {
         
         _cur += nBytes;
     }
-    inline int64_t Tell() const { return _cur - _mapStart; }
-    inline void Seek(int64_t offset) { _cur = _mapStart + offset; }
+    inline int64_t Tell() const {
+        return _cur - _mapping->GetMapStart();
+    }
+    inline void Seek(int64_t offset) {
+        _cur = _mapping->GetMapStart() + offset;
+    }
     inline void Prefetch(int64_t offset, int64_t size) {
-        ArchMemAdvise(_mapStart + offset, size, ArchMemAdviceWillNeed);
+        ArchMemAdvise(
+            _mapping->GetMapStart() + offset, size, ArchMemAdviceWillNeed);
     }
 
+    Vt_ArrayForeignDataSource *
+    CreateZeroCopyDataSource(void *addr, size_t numBytes) {
+        return _mapping->AddRangeReference(addr, numBytes);
+    }
+
+    inline void *TellMemoryAddress() const {
+        return _cur;
+    }
+    
 private:
-    char const *_cur;
-    char const *_mapStart;
-    size_t _length;
+    char *_cur;
+    FileMappingPtr _mapping;
     char *_debugPageMap;
     int _prefetchKB;
 };
 
+template <class FileMappingPtr>
+_MmapStream<FileMappingPtr>
+_MakeMmapStream(FileMappingPtr const &mapping, char *debugPageMap) {
+    return _MmapStream<FileMappingPtr>(mapping, debugPageMap);
+}
+
 struct _PreadStream {
+    // Pread streams do not support zero-copy arrays.
+    static constexpr bool SupportsZeroCopy = false;
+
     explicit _PreadStream(FILE *file) : _cur(0), _file(file) {}
     inline void Read(void *dest, size_t nBytes) {
         _cur += ArchPRead(_file, dest, nBytes, _cur);
@@ -568,6 +679,13 @@ public:
             _bufferPos = _filePos = offset;
         }
     }
+
+    // Seek to the next position that's a multiple of \p alignment.  Alignment
+    // must be a power-of-two.
+    inline int64_t Align(int alignment) {
+        Seek((Tell() + alignment - 1) & ~(alignment - 1));
+        return Tell();
+    }        
 
 private:
     inline void _FlushBuffer() {
@@ -827,6 +945,8 @@ class CrateFile::_Reader : public _ReaderBase
     }
 
 public:
+    static constexpr bool StreamSupportsZeroCopy = ByteStream::SupportsZeroCopy;
+    
     _Reader(CrateFile const *crate, ByteStream &src)
         : _ReaderBase(crate)
         , src(src) {}
@@ -1062,6 +1182,7 @@ public:
     int64_t Tell() const { return sink->Tell(); }
     void Seek(int64_t offset) { sink->Seek(offset); }
     void Flush() { sink->Flush(); }
+    int64_t Align(int alignment) { return sink->Align(alignment); }
 
     template <class T>
     uint32_t GetInlinedValue(T x) {
@@ -1290,6 +1411,328 @@ struct CrateFile::_ArrayValueHandlerBase : _ScalarValueHandlerBase<T>
     }
 };
 
+// Don't compress arrays smaller than this.
+constexpr size_t MinCompressedArraySize = 16;
+
+template <class Writer, class T>
+static inline ValueRep
+_WriteUncompressedArray(
+    Writer w, VtArray<T> const &array, CrateFile::Version ver)
+{
+    // We'll align the array to 8 bytes, so software can refer to mapped bytes
+    // directly if possible.
+    auto result = ValueRepForArray<T>(w.Align(sizeof(uint64_t)));
+
+    (ver < CrateFile::Version(0,7,0)) ?
+        w.template WriteAs<uint32_t>(array.size()) :
+        w.template WriteAs<uint64_t>(array.size());
+    
+    w.WriteContiguous(array.cdata(), array.size());
+
+    return result;
+}
+
+template <class Writer, class T>
+static inline ValueRep
+_WritePossiblyCompressedArray(
+    Writer w, VtArray<T> const &array, CrateFile::Version ver, ...)
+{
+    // Fallback case -- write uncompressed data.
+    return _WriteUncompressedArray(w, array, ver);
+}
+
+template <class Writer, class Int>
+static inline void
+_WriteCompressedInts(Writer w, Int const *begin, size_t size)
+{
+    // Make a buffer to compress to, compress, and write.
+    using Compressor = typename std::conditional<
+        sizeof(Int) == 4,
+        Usd_IntegerCompression,
+        Usd_IntegerCompression64>::type;
+    std::unique_ptr<char[]> compBuffer(
+        new char[Compressor::GetCompressedBufferSize(size)]);
+    size_t compSize =
+        Compressor::CompressToBuffer(begin, size, compBuffer.get());
+    w.template WriteAs<uint64_t>(compSize);
+    w.WriteContiguous(compBuffer.get(), compSize);
+}
+
+template <class Writer, class T>
+static inline
+typename std::enable_if<
+    std::is_same<T, int>::value ||
+    std::is_same<T, unsigned int>::value ||
+    std::is_same<T, int64_t>::value ||
+    std::is_same<T, uint64_t>::value,
+    ValueRep>::type
+_WritePossiblyCompressedArray(
+    Writer w, VtArray<T> const &array, CrateFile::Version ver, int)
+{
+    auto result = ValueRepForArray<T>(w.Tell());
+    // Total elements.
+    (ver < CrateFile::Version(0,7,0)) ?
+        w.template WriteAs<uint32_t>(array.size()) :
+        w.template WriteAs<uint64_t>(array.size());
+    if (array.size() < MinCompressedArraySize) {
+        w.WriteContiguous(array.cdata(), array.size());
+    } else {
+        _WriteCompressedInts(w, array.cdata(), array.size());
+        result.SetIsCompressed();
+    }
+    return result;
+}
+
+template <class Writer, class T>
+static inline
+typename std::enable_if<
+    std::is_same<T, GfHalf>::value ||
+    std::is_same<T, float>::value ||
+    std::is_same<T, double>::value,
+    ValueRep>::type
+_WritePossiblyCompressedArray(
+    Writer w, VtArray<T> const &array, CrateFile::Version ver, int)
+{
+    // Version 0.6.0 introduced compressed floating point arrays.
+    if (ver < CrateFile::Version(0,6,0) ||
+        array.size() < MinCompressedArraySize) {
+        return _WriteUncompressedArray(w, array, ver);
+    }
+
+    // Check to see if all the floats are exactly represented as integers.
+    auto isIntegral = [](T fp) {
+        constexpr int32_t max = std::numeric_limits<int32_t>::max();
+        constexpr int32_t min = std::numeric_limits<int32_t>::lowest();
+        return min <= fp && fp <= max &&
+            static_cast<T>(static_cast<int32_t>(fp)) == fp;
+    };    
+    if (std::all_of(array.cdata(), array.cdata() + array.size(), isIntegral)) {
+        // Encode as integers.
+        auto result = ValueRepForArray<T>(w.Tell());
+        (ver < CrateFile::Version(0,7,0)) ?
+            w.template WriteAs<uint32_t>(array.size()) :
+            w.template WriteAs<uint64_t>(array.size());
+        result.SetIsCompressed();
+        vector<int32_t> ints(array.size());
+        std::copy(array.cdata(), array.cdata() + array.size(), ints.data());
+        // Lowercase 'i' code indicates that the floats are written as
+        // compressed ints.
+        w.template WriteAs<int8_t>('i');
+        _WriteCompressedInts(w, ints.data(), ints.size());
+        return result;
+    }
+    
+    // Otherwise check if there are a small number of distinct values, which we
+    // can then write as a lookup table and indexes into that table.
+    vector<T> lut;
+    // Ensure that we give up soon enough if it doesn't seem like building a
+    // lookup table will be profitable.  Check the first 1024 elements at most.
+    unsigned int maxLutSize = std::min<size_t>(array.size() / 4, 1024);
+    vector<uint32_t> indexes;
+    for (auto elem: array) {
+        auto iter = std::find(lut.begin(), lut.end(), elem);
+        uint32_t index = iter-lut.begin();
+        indexes.push_back(index);
+        if (index == lut.size()) {
+            if (lut.size() != maxLutSize) {
+                lut.push_back(elem);
+            } else {
+                lut.clear();
+                indexes.clear();
+                break;
+            }
+        }
+    }
+    if (!lut.empty()) {
+        // Use the lookup table.  Lowercase 't' code indicates that floats are
+        // written with a lookup table and indexes.
+        auto result = ValueRepForArray<T>(w.Tell());
+        (ver < CrateFile::Version(0,7,0)) ?
+            w.template WriteAs<uint32_t>(array.size()) :
+            w.template WriteAs<uint64_t>(array.size());
+        result.SetIsCompressed();
+        w.template WriteAs<int8_t>('t');
+        // Write the lookup table itself.
+        w.template WriteAs<uint32_t>(lut.size());
+        w.WriteContiguous(lut.data(), lut.size());
+        // Now write indexes.
+        _WriteCompressedInts(w, indexes.data(), indexes.size());
+        return result;
+    }
+
+    // Otherwise, just write uncompressed floats.  We don't need to write a code
+    // byte here like the 'i' and 't' above since the resulting ValueRep is not
+    // marked compressed -- the reader code will thus just read the uncompressed
+    // values directly.
+    return _WriteUncompressedArray(w, array, ver);
+}
+
+template <class Reader, class T>
+static inline
+typename std::enable_if<!Reader::StreamSupportsZeroCopy ||
+                        !_IsBitwiseReadWrite<T>::value>::type
+_ReadUncompressedArray(
+    Reader reader, ValueRep rep, VtArray<T> *out, CrateFile::Version ver)
+{
+    // The reader's bytestream does not support zero-copy, or the element type
+    // is not bitwise identical in memory and on disk, so just read the contents
+    // into memory.
+    out->resize(
+        ver < CrateFile::Version(0,7,0) ?
+        reader.template Read<uint32_t>() :
+        reader.template Read<uint64_t>());
+    reader.ReadContiguous(out->data(), out->size());
+}
+
+template <class Reader, class T>
+static inline
+typename std::enable_if<Reader::StreamSupportsZeroCopy &&
+                        _IsBitwiseReadWrite<T>::value>::type
+_ReadUncompressedArray(
+    Reader reader, ValueRep rep, VtArray<T> *out, CrateFile::Version ver)
+{
+    static bool zeroCopyEnabled = TfGetEnvSetting(USDC_ENABLE_ZERO_COPY_ARRAYS);
+    
+    // The reader's stream supports zero-copy and T is written to disk just as
+    // it is represented in memory, so if the array is of reasonable size and
+    // the memory is suitably aligned, then make an array that refers directly
+    // into the stream's memory.
+
+    uint64_t size = (ver < CrateFile::Version(0,7,0)) ?
+        reader.template Read<uint32_t>() :
+        reader.template Read<uint64_t>();
+
+    // Check size and alignment -- the standard requires that alignments
+    // are power-of-two.
+    size_t numBytes = sizeof(T) * size;
+    static constexpr size_t MinZeroCopyArrayBytes = 2048; // Half a page?
+    if (zeroCopyEnabled &&
+        /* size reasonable? */numBytes >= MinZeroCopyArrayBytes &&
+        /*    alignment ok? */(reader.src.Tell() & (alignof(T)-1)) == 0) {
+
+        // Make a VtArray with a foreign source that points into the stream.  We
+        // pass addRef=false here, because CreateZeroCopyDataSource does that
+        // already -- it needs to know if it's taken the count from 0 to 1 or
+        // not.
+        *out = std::move(
+            VtArray<T>(
+                reader.src.CreateZeroCopyDataSource(
+                    reader.src.TellMemoryAddress(), numBytes),
+                static_cast<T *>(reader.src.TellMemoryAddress()), size,
+                /*addRef=*/false)
+            );
+    }
+    else {
+        // Copy the data instead.
+        out->resize(size);
+        reader.ReadContiguous(out->data(), out->size());
+    }
+}
+
+template <class Reader, class T>
+static inline void
+_ReadPossiblyCompressedArray(
+    Reader reader, ValueRep rep, VtArray<T> *out, CrateFile::Version ver, ...)
+{
+    // Fallback uncompressed case.
+    _ReadUncompressedArray(reader, rep, out, ver);
+}
+
+// Return true if compressed, false if not.
+template <class Reader, class Int>
+static inline void
+_ReadCompressedInts(Reader reader, Int *out, size_t size)
+{
+    using Compressor = typename std::conditional<
+        sizeof(Int) == 4,
+        Usd_IntegerCompression,
+        Usd_IntegerCompression64>::type;
+    std::unique_ptr<char[]> compBuffer(
+        new char[Compressor::GetCompressedBufferSize(size)]);
+    auto compSize = reader.template Read<uint64_t>();
+    reader.ReadContiguous(compBuffer.get(), compSize);
+        Compressor::DecompressFromBuffer(compBuffer.get(), compSize, out, size);
+}
+
+template <class Reader, class T>
+static inline
+typename std::enable_if<
+    std::is_same<T, int>::value ||
+    std::is_same<T, unsigned int>::value ||
+    std::is_same<T, int64_t>::value ||
+    std::is_same<T, uint64_t>::value>::type
+_ReadPossiblyCompressedArray(
+    Reader reader, ValueRep rep, VtArray<T> *out, CrateFile::Version ver, int)
+{
+    // Version 0.5.0 introduced compressed int arrays.
+    if (ver < CrateFile::Version(0,5,0) || !rep.IsCompressed()) {
+        _ReadUncompressedArray(reader, rep, out, ver);
+    }
+    else {
+        // Read total elements.
+        out->resize(ver < CrateFile::Version(0,7,0) ?
+                    reader.template Read<uint32_t>() :
+                    reader.template Read<uint64_t>());
+        if (out->size() < MinCompressedArraySize) {
+            reader.ReadContiguous(out->data(), out->size());
+        } else {
+            _ReadCompressedInts(reader, out->data(), out->size());
+        }
+    }
+}
+
+template <class Reader, class T>
+static inline
+typename std::enable_if<
+    std::is_same<T, GfHalf>::value ||
+    std::is_same<T, float>::value ||
+    std::is_same<T, double>::value>::type
+_ReadPossiblyCompressedArray(
+    Reader reader, ValueRep rep, VtArray<T> *out, CrateFile::Version ver, int)
+{
+    // Version 0.6.0 introduced compressed floating point arrays.
+    if (ver < CrateFile::Version(0,6,0) || !rep.IsCompressed()) {
+        _ReadUncompressedArray(reader, rep, out, ver);
+        return;
+    }
+
+    out->resize(ver < CrateFile::Version(0,7,0) ?
+                reader.template Read<uint32_t>() :
+                reader.template Read<uint64_t>());
+    auto odata = out->data();
+    auto osize = out->size();
+
+    if (osize < MinCompressedArraySize) {
+        // Not stored compressed.
+        reader.ReadContiguous(odata, osize);
+        return;
+    }
+    
+    // Read the code
+    char code = reader.template Read<int8_t>();
+    if (code == 'i') {
+        // Compressed integers.
+        vector<int32_t> ints(osize);
+        _ReadCompressedInts(reader, ints.data(), ints.size());
+        std::copy(ints.begin(), ints.end(), odata);
+    } else if (code == 't') {
+        // Lookup table & indexes.
+        auto lutSize = reader.template Read<uint32_t>();
+        vector<T> lut(lutSize);
+        reader.ReadContiguous(lut.data(), lut.size());
+        vector<uint32_t> indexes(osize);
+        _ReadCompressedInts(reader, indexes.data(), indexes.size());
+        auto o = odata;
+        for (auto index: indexes) {
+            *o++ = lut[index];
+        }
+    } else {
+        // This is a corrupt data stream.
+        TF_RUNTIME_ERROR("Corrupt data stream detected reading compressed "
+                         "array in <%s>", reader.crate->GetFileName().c_str());
+    }
+}
+
 // Array handler for types that support arrays -- does deduplication.
 template <class T>
 struct CrateFile::_ArrayValueHandlerBase<
@@ -1312,10 +1755,17 @@ struct CrateFile::_ArrayValueHandlerBase<
         ValueRep &target = iresult.first->second;
         if (iresult.second) {
             // Not yet present.
-            target.SetPayload(w.Tell());
-            w.WriteAs<uint32_t>(1);
-            w.WriteAs<uint32_t>(array.size());
-            w.WriteContiguous(array.data(), array.size());
+            if (w.crate->_packCtx->writeVersion < Version(0,5,0)) {
+                target.SetPayload(w.Align(sizeof(uint64_t)));
+                w.WriteAs<uint32_t>(1);
+                w.WriteAs<uint32_t>(array.size());
+                w.WriteContiguous(array.cdata(), array.size());
+            } else {
+                // If we're writing 0.5.0 or greater, see if we can possibly
+                // compress this array.
+                target = _WritePossiblyCompressedArray(
+                    w, array, w.crate->_packCtx->writeVersion, 0);
+            }
         }
         return target;
     }
@@ -1328,10 +1778,14 @@ struct CrateFile::_ArrayValueHandlerBase<
             return;
         }
         reader.Seek(rep.GetPayload());
-        // Read and discard shape size.
-        reader.template Read<uint32_t>();
-        out->resize(reader.template Read<uint32_t>());
-        reader.ReadContiguous(out->data(), out->size());
+
+        // Check version
+        Version fileVer(reader.crate->_boot);
+        if (fileVer < Version(0,5,0)) {
+            // Read and discard shape size.
+            reader.template Read<uint32_t>();
+        }
+        _ReadPossiblyCompressedArray(reader, rep, out, fileVer, 0);
     }
 
     ValueRep PackVtValue(_Writer w, VtValue const &v) {
@@ -1403,13 +1857,16 @@ CrateFile::CreateNew()
 }
 
 /* static */
-ArchConstFileMapping
+CrateFile::_FileMappingIPtr
 CrateFile::_MmapFile(char const *fileName, FILE *file)
 {
-    ArchConstFileMapping map = ArchMapFileReadOnly(file);
-    if (!map)
+    auto mapping = _FileMappingIPtr(
+        new _FileMapping(ArchMapFileReadWrite(file)));
+    if (!mapping->GetMapStart()) {
         TF_RUNTIME_ERROR("Couldn't map file '%s'", fileName);
-    return map;
+        mapping.reset();
+    }
+    return mapping;
 }
 
 /* static */
@@ -1430,8 +1887,8 @@ CrateFile::Open(string const &fileName)
 
     if (!TfGetenvBool("USDC_USE_PREAD", false)) {
         // Map the file.
-        auto mapStart = _MmapFile(fileName.c_str(), inputFile.get());
-        result.reset(new CrateFile(fileName, std::move(mapStart)));
+        auto mapping = _MmapFile(fileName.c_str(), inputFile.get());
+        result.reset(new CrateFile(fileName, std::move(mapping)));
     } else {
         result.reset(new CrateFile(fileName, std::move(inputFile)));
     }
@@ -1466,8 +1923,8 @@ CrateFile::CrateFile(bool useMmap)
     _DoAllTypeRegistrations();
 }
 
-CrateFile::CrateFile(string const &fileName, ArchConstFileMapping mapStart)
-    : _mapStart(std::move(mapStart))
+CrateFile::CrateFile(string const &fileName, _FileMappingIPtr mappedFile)
+    : _mappedFile(std::move(mappedFile))
     , _fileName(fileName)
     , _useMmap(true)
 {
@@ -1477,12 +1934,13 @@ CrateFile::CrateFile(string const &fileName, ArchConstFileMapping mapStart)
 
 void
 CrateFile::_InitMMap() {
-    if (_mapStart) {
-        int64_t fileSize = ArchGetFileMappingLength(_mapStart);
+    if (_mappedFile) {
+        int64_t fileSize = _mappedFile->GetLength();
         
         // Mark the whole file as random access to start to avoid large NFS
         // prefetch.  We explicitly prefetch the structural sections later.
-        ArchMemAdvise(_mapStart.get(), fileSize, ArchMemAdviceRandomAccess);
+        ArchMemAdvise(
+            _mappedFile->GetMapStart(), fileSize, ArchMemAdviceRandomAccess);
 
         // If we're debugging access, allocate a debug page map. 
         static string debugPageMapPattern = TfGetenv("USDC_DUMP_PAGE_MAPS");
@@ -1498,16 +1956,20 @@ CrateFile::_InitMMap() {
         // Make an mmap stream but disable auto prefetching -- the
         // _ReadStructuralSections() call manages prefetching itself using
         // higher-level knowledge.
-        auto reader = _MakeReader(
-            _MmapStream(_mapStart, _debugPageMap.get()).DisablePrefetch());
+        auto reader =
+            _MakeReader(
+                _MakeMmapStream(
+                    _mappedFile, _debugPageMap.get()).DisablePrefetch());
         TfErrorMark m;
         _ReadStructuralSections(reader, fileSize);
         if (!m.IsClean())
             _fileName.clear();
 
         // Restore default prefetch behavior if we're not doing custom prefetch.
-        if (!_GetMMapPrefetchKB())
-            ArchMemAdvise(_mapStart.get(), fileSize, ArchMemAdviceNormal);
+        if (!_GetMMapPrefetchKB()) {
+            ArchMemAdvise(
+                _mappedFile->GetMapStart(), fileSize, ArchMemAdviceNormal);
+        }
     } else {
         _fileName.clear();
     }
@@ -1519,6 +1981,7 @@ CrateFile::CrateFile(string const &fileName, _UniqueFILE inputFile)
     , _useMmap(false)
 {
     _DoAllTypeRegistrations();
+    _InitPread();
 }
 
 void
@@ -1542,11 +2005,11 @@ CrateFile::~CrateFile()
     static std::mutex outputMutex;
 
     // Dump a debug page map if requested.
-    if (_useMmap && _mapStart && _debugPageMap) {
-        int64_t length = ArchGetFileMappingLength(_mapStart);
+    if (_useMmap && _mappedFile && _debugPageMap) {
+        int64_t length = _mappedFile->GetLength();
         int64_t npages = (length + PAGESIZE-1) / PAGESIZE;
         std::unique_ptr<unsigned char []> mincoreMap(new unsigned char[npages]);
-        void const *p = static_cast<void const *>(_mapStart.get());
+        void const *p = static_cast<void const *>(_mappedFile->GetMapStart());
         if (!ArchQueryMappedMemoryResidency(p, length, mincoreMap.get())) {
             TF_WARN("failed to obtain memory residency information");
             return;
@@ -1598,6 +2061,12 @@ CrateFile::~CrateFile()
         }
         printf("\n<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
                "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+    }
+
+    // If we have zero copy ranges to detach, do it now.
+    if (_useMmap && _mappedFile) {
+        _mappedFile->DetachReferencedRanges();
+        _mappedFile.reset();
     }
 
     _DeleteValueHandlers();
@@ -1662,8 +2131,8 @@ CrateFile::Packer::Close()
     // written file.
     if (_crate->_useMmap) {
         // Must remap the file.
-        _crate->_mapStart = _MmapFile(_crate->_fileName.c_str(), file.get());
-        if (!_crate->_mapStart)
+        _crate->_mappedFile = _MmapFile(_crate->_fileName.c_str(), file.get());
+        if (!_crate->_mappedFile)
             return false;
         _crate->_InitMMap();
     } else {
@@ -1922,7 +2391,8 @@ CrateFile::_GetTimeSampleValueImpl(TimeSamples const &ts, size_t i) const
     // Need to read the rep from the file for index i.
     auto offset = ts.valuesFileOffset + i * sizeof(ValueRep);
     if (_useMmap) {
-        auto reader = _MakeReader(_MmapStream(_mapStart, _debugPageMap.get()));
+        auto reader = _MakeReader(
+            _MakeMmapStream(_mappedFile, _debugPageMap.get()));
         reader.Seek(offset);
         return VtValue(reader.Read<ValueRep>());
     } else {
@@ -1938,7 +2408,8 @@ CrateFile::_MakeTimeSampleValuesMutableImpl(TimeSamples &ts) const
     // Read out the reps into the vector.
     ts.values.resize(ts.times.Get().size());
     if (_useMmap) {
-        auto reader = _MakeReader(_MmapStream(_mapStart, _debugPageMap.get()));
+        auto reader = _MakeReader(
+            _MakeMmapStream(_mappedFile, _debugPageMap.get()));
         reader.Seek(ts.valuesFileOffset);
         for (size_t i = 0, n = ts.times.Get().size(); i != n; ++i)
             ts.values[i] = reader.Read<ValueRep>();
@@ -2810,7 +3281,8 @@ void
 CrateFile::_ReadRawBytes(int64_t start, int64_t size, char *buf) const
 {
     if (_useMmap) {
-        auto reader = _MakeReader(_MmapStream(_mapStart, _debugPageMap.get()));
+        auto reader = _MakeReader(
+            _MakeMmapStream(_mappedFile, _debugPageMap.get()));
         reader.Seek(start);
         reader.template ReadContiguous<char>(buf, size);
     } else {
@@ -2972,10 +3444,13 @@ CrateFile::_UnpackValue(ValueRep rep, T *out) const
 {
     auto const &h = _GetValueHandler<T>();
     if (_useMmap) {
-        h.Unpack(_MakeReader(_MmapStream(_mapStart,
-                                         _debugPageMap.get())), rep, out);
+        h.Unpack(
+            _MakeReader(
+                _MakeMmapStream(_mappedFile, _debugPageMap.get())), rep, out);
     } else {
-        h.Unpack(_MakeReader(_PreadStream(_inputFile.get())), rep, out);
+        h.Unpack(
+            _MakeReader(
+                _PreadStream(_inputFile.get())), rep, out);
     }
 }
 
@@ -2984,10 +3459,13 @@ void
 CrateFile::_UnpackValue(ValueRep rep, VtArray<T> *out) const {
     auto const &h = _GetValueHandler<T>();
     if (_useMmap) {
-        h.UnpackArray(_MakeReader(_MmapStream(_mapStart,
-                                              _debugPageMap.get())), rep, out);
+        h.UnpackArray(
+            _MakeReader(
+                _MakeMmapStream(_mappedFile, _debugPageMap.get())), rep, out);
     } else {
-        h.UnpackArray(_MakeReader(_PreadStream(_inputFile.get())), rep, out);
+        h.UnpackArray(
+            _MakeReader(
+                _PreadStream(_inputFile.get())), rep, out);
     }
 }
 
@@ -3057,8 +3535,8 @@ void CrateFile::_DoTypeRegistration() {
     _unpackValueFunctionsMmap[typeEnumIndex] =
         [this, valueHandler](ValueRep rep, VtValue *out) {
             valueHandler->UnpackVtValue(
-                _MakeReader(_MmapStream(_mapStart,
-                                        _debugPageMap.get())), rep, out);
+                _MakeReader(_MakeMmapStream(_mappedFile,
+                                            _debugPageMap.get())), rep, out);
         };
 
     _EnumToTfTypeTablePopulater::Populate<T>(

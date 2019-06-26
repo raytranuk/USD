@@ -55,7 +55,7 @@ void wrapUsdCollectionAPI()
 {
     typedef UsdCollectionAPI This;
 
-    class_<This, bases<UsdSchemaBase> >
+    class_<This, bases<UsdAPISchemaBase> >
         cls("CollectionAPI");
 
     cls
@@ -73,6 +73,14 @@ void wrapUsdCollectionAPI()
         .def("IsTyped",
             static_cast<bool (*)(void)>( [](){ return This::IsTyped; } ))
         .staticmethod("IsTyped")
+
+        .def("IsApplied", 
+            static_cast<bool (*)(void)>( [](){ return This::IsApplied; } ))
+        .staticmethod("IsApplied")
+
+        .def("IsMultipleApply", 
+            static_cast<bool (*)(void)>( [](){ return This::IsMultipleApply; } ))
+        .staticmethod("IsMultipleApply")
 
         .def("GetSchemaAttributeNames",
              &This::GetSchemaAttributeNames,
@@ -153,6 +161,9 @@ WRAP_CUSTOM {
         .def("IsPathIncluded", _WrapIsPathIncluded_2, 
              (arg("path"), arg("parentExpansionRule")))
         .def("HasExcludes", &MQuery::HasExcludes)
+        .def("__hash__", &MQuery::GetHash)
+        .def(self == self)
+        .def(self != self)
         ;
 
     using This = UsdCollectionAPI;
@@ -161,13 +172,23 @@ WRAP_CUSTOM {
         &This::ComputeMembershipQuery;
 
     scope collectionAPI = _class 
-        .def("AddCollection", &This::AddCollection, 
+        .def(init<UsdPrim, TfToken>())
+
+        .def("ApplyCollection", &This::ApplyCollection, 
              (arg("prim"), arg("name"), 
               arg("expansionRule")=UsdTokens->expandPrims))
-            .staticmethod("AddCollection")
+            .staticmethod("ApplyCollection")
 
-        .def("GetCollection", &This::GetCollection,
+        .def("GetCollection", 
+             (UsdCollectionAPI(*)(const UsdPrim &prim, 
+                                        const TfToken &name))
+                &This::GetCollection,
              (arg("prim"), arg("name")))
+        .def("GetCollection", 
+             (UsdCollectionAPI(*)(const UsdStagePtr &stage, 
+                                  const SdfPath &collectionPath))
+                &This::GetCollection,
+             (arg("stage"), arg("collectionPath")))
             .staticmethod("GetCollection")
 
         .def("GetAllCollections", &This::GetAllCollections, 
@@ -195,6 +216,9 @@ WRAP_CUSTOM {
         .def("CreateIncludesRel", &This::CreateIncludesRel)
         .def("GetExcludesRel", &This::GetExcludesRel)
         .def("CreateExcludesRel", &This::CreateExcludesRel)
+
+        .def("IncludePath", &This::IncludePath, arg("pathToInclude"))
+        .def("ExcludePath", &This::ExcludePath, arg("pathToExclude"))
 
         .def("Validate", &_WrapValidate)
 

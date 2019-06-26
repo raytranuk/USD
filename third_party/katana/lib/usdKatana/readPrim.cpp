@@ -48,7 +48,7 @@
 
 #include "pxr/usd/usdShade/material.h"
 
-#include "pxr/usd/usdRi/statements.h"
+#include "pxr/usd/usdRi/statementsAPI.h"
 
 #include "pxr/usd/sdf/path.h"
 #include "pxr/usd/usd/collectionAPI.h"
@@ -64,6 +64,9 @@ PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_ENV_SETTING(USD_KATANA_IMPORT_OLD_STYLE_COLLECTIONS, true, 
         "Whether old-style collections encoded using UsdGeomCollectionAPI "
         "must be imported by katana.");
+TF_DEFINE_ENV_SETTING(USD_KATANA_ALLOW_CUSTOM_MATERIAL_SCOPES, false,
+        "Set to true to enable custom names for the parent scope "
+        "of materials. Otherwise only scopes named Looks are allowed.");
 
 FnLogSetup("PxrUsdKatanaReadPrim");
 
@@ -145,12 +148,15 @@ _GetMaterialAssignAttr(
             // path mapping
             std::string location =
                 PxrUsdKatanaUtils::ConvertUsdMaterialPathToKatLocation(targetPath, data);
+
+            static const bool allowCustomScopes = 
+                TfGetEnvSetting(USD_KATANA_ALLOW_CUSTOM_MATERIAL_SCOPES);
                 
             // XXX Materials containing only display terminals are causing issues
             //     with katana material manipulation workflows.
             //     For now: exclude any material assign which doesn't include
             //     /Looks/ in the path
-            if (location.find(UsdKatanaTokens->katanaLooksScopePathSubstring)
+            if (!allowCustomScopes && location.find(UsdKatanaTokens->katanaLooksScopePathSubstring)
                     == std::string::npos)
             {
                 return FnKat::Attribute();
@@ -175,8 +181,8 @@ _GatherRibAttributes(
     bool hasAttrs = false;
 
     // USD SHADING STYLE ATTRIBUTES
-    UsdRiStatements riStatements(prim);
-    if (riStatements) {
+    if (prim) {
+        UsdRiStatementsAPI riStatements(prim);
         const std::vector<UsdProperty> props = 
             riStatements.GetRiAttributes();
         std::string attrName;
@@ -303,7 +309,7 @@ _BuildScopedCoordinateSystems(
 
     TF_FOR_ALL(childIt, prim.GetChildren()) {
 
-        UsdRiStatements riStmts(*childIt);
+        UsdRiStatementsAPI riStmts(*childIt);
 
         if (!riStmts.HasCoordinateSystem()) {
             continue;
@@ -972,6 +978,19 @@ PxrUsdKatanaReadPrim(
     }
 
     _AddExtraAttributesOrNamespaces(prim, data, attrs);
+
+    // 
+    // Store the applied apiSchemas metadata as a list of typeName strings
+    //
+    TfTokenVector appliedSchemaTokens = prim.GetAppliedSchemas();
+    if (!appliedSchemaTokens.empty()){
+        std::vector<std::string> appliedSchemas(appliedSchemaTokens.size());
+        std::transform(appliedSchemaTokens.begin(), appliedSchemaTokens.end(), 
+                       appliedSchemas.begin(), [](const TfToken& token){ 
+            return token.GetString();
+        });
+        attrs.set("info.usd.apiSchemas", FnKat::StringAttribute(appliedSchemas));
+    }
 }
 
 PXR_NAMESPACE_CLOSE_SCOPE

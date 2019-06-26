@@ -136,7 +136,7 @@ class TestUsdCreateProperties(unittest.TestCase):
             self.assertEqual(rel.GetTargets(), ['/Parent'])
 
             # Test relative path
-            rel.AddTarget("../../Sibling1")
+            rel.AddTarget("../../Sibling1", position=Usd.ListPositionBackOfAppendList)
             self.assertEqual(rel.GetTargets(), ['/Parent', '/Parent/Sibling1'])
 
             rel.SetCustom(False)
@@ -372,12 +372,24 @@ class TestUsdCreateProperties(unittest.TestCase):
         self.assertEqual(len(prim.GetProperties()), 2*len(rels))
         self.assertEqual(len(prim.GetPropertiesInNamespace('')), 2*len(rels))
         self.assertEqual(len(prim.GetPropertiesInNamespace([])), 2*len(rels))
+
         # Not 6, because property 'foo' is NOT in the namespace 'foo'
         self.assertEqual(len(prim.GetPropertiesInNamespace('foo')), 5)
         self.assertEqual(len(prim.GetPropertiesInNamespace('foo:')), 5)
+
+        # Try passing in a predicate that does the same thing.
+        fooPred = lambda name: name.startswith("foo:")
+        self.assertEqual(len(prim.GetProperties(predicate=fooPred)), 5)
+
         self.assertEqual(len(prim.GetPropertiesInNamespace(['foo'])), 5)
         # Make sure prefix match works, i.e. foo:bar2 is not in foo:bar namespace
         self.assertEqual(len(prim.GetPropertiesInNamespace('foo:bar')), 2)
+        self.assertEqual(len(prim.GetPropertiesInNamespace(['foo', 'bar'])), 2)
+
+        # Try passing in a predicate that does the same thing.
+        fooBarPred = lambda name: name.startswith("foo:bar:")
+        self.assertEqual(len(prim.GetProperties(predicate=fooBarPred)), 2)
+
         # And try a fail/empty case...
         self.assertEqual(len(prim.GetPropertiesInNamespace('graphica')), 0)
 

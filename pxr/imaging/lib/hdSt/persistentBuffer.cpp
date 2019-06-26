@@ -22,10 +22,10 @@
 // language governing permissions and limitations under the Apache License.
 //
 #include "pxr/imaging/glf/glew.h"
+#include "pxr/imaging/glf/contextCaps.h"
 
 #include "pxr/imaging/hdSt/persistentBuffer.h"
 #include "pxr/imaging/hd/perfLog.h"
-#include "pxr/imaging/hd/renderContextCaps.h"
 
 #include "pxr/imaging/hf/perfLog.h"
 
@@ -34,13 +34,13 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 HdStPersistentBuffer::HdStPersistentBuffer(
     TfToken const &role, size_t dataSize, void* data)
-    : HdResourceGL(role)
+    : HdStResourceGL(role)
     , _mappedAddress(0)
 {
     HD_TRACE_FUNCTION();
     HF_MALLOC_TAG_FUNCTION();
 
-    HdRenderContextCaps const &caps = HdRenderContextCaps::GetInstance();
+    GlfContextCaps const &caps = GlfContextCaps::GetInstance();
 
     GLuint newId = 0;
     glGenBuffers(1, &newId);

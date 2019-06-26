@@ -1,5 +1,347 @@
 # Change Log
 
+## [0.8.5a] - 2018-05-21
+
+### Fixed
+- Fixed broken URL in build_usd.py for downloading libtiff. (Issue #498)
+
+## [0.8.5] - 2018-05-07
+
+### Added
+- New 'trace' library providing performance profiling functionality.
+- API to Ar for resolver implementations that wrap around other resolvers.
+- TextureCoordinate role and TexCoord{2,3}{h,f,d}{Array} value types to Sdf 
+  to indicate attributes that represent UV(W) texture coordinates.
+- UsdUtilsSparseValueWriter and UsdUtilsSparseAttrValueWriter utility classes
+  for authoring attribute values sparsely.
+- UsdGeomPrimvar::GetIndicesAttr API for indexed primvars.
+- UsdGeomPrimvarsAPI schema for accessing primvars, including primvar
+  values inherited down namespace. This is intended as an eventual replacement 
+  for the primvar API on UsdGeomImageable.
+- API to UsdShadeMaterial to support render context-specific terminal outputs 
+  and core support for three universal render context outputs: surface, 
+  displacement, and volume.
+- Time-sampling support for UsdGeomPointInstancer via new methods for
+  computing extents and instance transforms at multiple times.
+- Finalize method for sprims and bprims in Hydra.
+- Time-sampling support in Hydra for geometry instancing.
+- Maya plugin users can specify if colors coming from Maya are linear via the
+  `PIXMAYA_LINEAR_COLORS` environment variable.
+- Support for import/export with new TextureCoordinate role in Maya plugin.
+- Support for cards drawMode in USD reference assembly in Maya plugin.
+- Support for LiveSurface with proxy shapes in Maya plugin.
+- Support for importing UsdSkel schemas and exporting locators and
+  particles in Maya plugin.
+- Option for placing exported data in parent scope in Maya plugin.
+- Initial support for session layer metadata in PxrUsdIn in Katana plugin.
+- Support for reading in UsdLuxCylinderLight schemas in Katana plugin.
+- Gusd Python bindings for Houdini plugin.
+
+### Changed
+- USD now requires TBB version 4.4 Update 6 or later.
+- Removed GLUT dependency for libtiff in build_usd.py. (Issue #402)
+- build_usd.py will now use cURL to download dependencies if it's
+  installed in the user's PATH. This can help avoid TLS v1.2 errors
+  when downloading from certain sites. (Issue #449)
+- Numerous documentation additions and fixes throughout the codebase.
+- Improved performance of SdfCopySpec and UsdUtils stitching API; one test
+  case showed a 35% speed improvement, from 160s to 118s.
+- SdfLayer now uses the resolved path provided by Ar for a given identifier
+  to determine the layer file format. (Issue #144)
+- Simplified API for setting layer data in SdfFileFormat subclasses.
+- Adding or removing invalid sublayers now results in composition errors.
+- UsdStage::CreateNew and CreateInMemory now accept an InitialLoadSet argument.
+  This controls whether new payloads are loaded automatically. (Issue #267)
+- UsdStage::ExpandPopulationMask now considers attribute connections.
+- UsdStage::Flatten now authors anchored asset paths in flattened results.
+- UsdTraverseInstanceProxies() now includes instance proxy prims that pass the
+  default predicate instead of all prims.
+- .usdc files now support zero-copy array access, which can significantly
+  improve performance. This feature is supported by all .usdc file
+  versions, but may not be activated for certain files depending on their
+  data alignment. In these cases, users can simply re-export the file 
+  to activate zero-copy access.
+
+  Users can set the environment variable `USDC_ENABLE_ZERO_COPY_ARRAYS` to 0 
+  to disable this feature. Users can also track cases where array data is 
+  copied due to modifications by setting the environment variable
+  `VT_LOG_STACK_ON_ARRAY_DETACH_COPY` to 1.
+- Other performance improvements in UsdStage composition.
+- API schemas are now classified as either "applied" or "non-applied". See
+  "Generating New Schema Classes" tutorial for more information. 
+- Behavior of UsdUtils stitching API can now be customized via callbacks.
+- UsdShadeMaterialBindingAPI now issues a warning when computing resolved
+  material bindings if prims with old "look:binding" relationships are found.
+  This can be disabled by setting the environment variable 
+  `USD_SHADE_WARN_ON_LOOK_BINDING` to 0.
+- UsdRiMaterialAPI now supports writing ri:surface outputs. ri:bxdf outputs are
+  still written by default, but this can be disabled by setting the environment
+  variable `USD_RI_WRITE_BXDF_OUTPUT` to 0.
+- UsdRiStatementsAPI now supports encoding ri attibutes as primvars. This is
+  disabled by default but can be enabled by setting the environment variable 
+  `USDRI_STATEMENTS_WRITE_NEW_ATTR_ENCODING` to 1.
+- Additions and improvements to UsdLux and UsdSkel schemas.
+- Hydra backends that consume full network materials now receive all primvars
+  for all rprims, not just those with bound materials.
+- Several improvements to primvar handling and picking infrastructure in Hydra.
+- Several performance improvements in Hydra, especially for material bindings
+  and scenes with heavy nesting of instances.
+- Ongoing work on Hydra compute framework.
+- Conformed Hydra API to use "Primvar" instead of "PrimVar".
+- HdMaterialNetwork is now emitted in topological order.
+- Redundant animation data is no longer written during Maya export.
+- Katana plugin now allows parent scope names for materials other than "Looks".
+  This can be enabled by setting the `USD_KATANA_ALLOW_CUSTOM_MATERIAL_SCOPES`
+  environment variable to 1.
+- Refactor material loading in Katana plugin so that material locations aren't 
+  computed all at once and site ops can run on each location individually.
+- Improved construction of material terminal outputs in Katana plugin.
+- Caching improvements in Houdini plugin to share USD stages between loaded
+  primitives when possible.
+- Improved error handling and reporting in Houdini plugin.
+- USD stage masking in Houdini plugin can now be disabled via 
+  `GUSD_STAGEMASK_ENABLE` environment variable.
+- Improved performance when opening USD stages which don't use "component" kind
+  in their model hierarchy.
+- Object-level transforms are now written at a higher-level scope than leaf
+  primitives if possible in Houdini plugin.
+
+### Deprecated
+- UsdGeomFaceSetAPI in favor of UsdGeomSubset.
+- UsdGeomCollectionAPI in favor of UsdCollectionAPI.
+
+### Removed
+- tracelite library, which has been replaced with the trace library.
+- Conversions for Python's datetime and dependency on boost::date_time.
+- Several unused classes and functions.
+- usdHydra schemas. This functionality is being replaced with by a registry
+  of shaders in a future release.
+- API for ri:bxdf output on UsdRiMaterialAPI schema. ri:bxdf sources will still
+  be returned by UsdRiMaterialAPI::GetSurface for backwards compatibility.
+
+### Fixed
+- Build errors when using ninja.
+- Error when extracting boost on Windows in build_usd.py. (Issue #308)
+- The build now prefers Alembic library specified at cmake time over any
+  Alembic library found in PATH. (Issue #409)
+- Several compile-time warnings on clang and other compilers.
+- Bug where list-op valued metadata was not emitted by UsdStage::Flatten.
+- Missing notifications for master prims affected by metadata/property changes.
+- Crash in UsdCollectionAPI::ApplyCollection when given an invalid collection 
+  name. (Issue #425)
+- Change processing for changes to drawMode property in imaging.
+- Numerous fixes to cards draw mode.
+- Change processing bug when removing nested point instancers.
+- Crashes in pxOsd due to incorrect authored crease data.
+- Bug where usdview would not redraw after switching renderer.
+- Crash in Alembic plugin when reading files with object names beginning 
+  with numerals.
+- Change processing bug when reloading an Alembic layer. (Issue #429)
+- Several crash bugs in Maya plugin.
+- Material export bug in Maya plugin where the surface terminal was not
+  being exported under the "ri" render context. This fix requires re-exporting
+  any material networks exported from Maya using version 0.8.4.
+- Prevent overwriting instance sources that resolve to the same master name
+  in Katana plugin.
+- Path resolution issue in Houdini plugin.
+- Miscellaneous bug fixes in Houdini plugin.
+
+## [0.8.4] - 2018-03-05
+
+### Added
+- The PXR_PLUGINPATH_NAME environment variable name may be changed by
+  specifying `PXR_OVERRIDE_PLUGINPATH_NAME=<name>` when running cmake.
+- Example sendmail plugin for usdview, located at
+  extras/usd/examples/usdviewPlugins/sendMail.py
+- ArDefaultResolverContext, a context object for the ArDefaultResolver asset
+  resolution implementation that allows additional search paths to be used
+  during asset resolution.
+- Users can now query the UsdNotice::ObjectsChanged notice for the changed
+  scene description fields that affected the reported objects.
+- UsdAPISchemaBase base class for all API schemas.
+- All UsdGeomBoundable schemas in usdGeom now have functions for computing
+  extents. These functions are also used when calling the general 
+  UsdGeomBoundable::ComputeExtentFromPlugins method.
+- UsdLuxCylinderLight schema.
+- Significant additions to edge and point selection and highlighting 
+  capabilities in Hydra.
+- Initial support for UsdSkel bones in usdImaging.
+- Initial support for exporting joints and skin clusters using the UsdSkel
+  schema in the Maya plugin.
+- Documentation for third party plugin code is now included in the
+  doxygen build.
+
+### Changed
+- build_usd.py no longer checks for pyside-uic or boost::python if Python
+  support is disabled, and no longer builds OpenImageIO's Python bindings.
+- Updated moduleDeps.cpp files to only register direct library dependencies.
+  This makes it easier for users to generate their own file for custom schemas.
+- ArDefaultResolver now allows search paths like "Dir/File.usd" to be anchored 
+  to other paths via AnchorRelativePath. During composition, these asset paths 
+  will be resolved relative to the layer where they were authored before
+  falling back to the previous search path behavior.
+- Updates to VtArray and .usdc code in preparation for zero-copy functionality.
+- Inherit and specializes arcs to non-existent prims are no longer considered
+  composition errors.
+- Apply method on API schemas have been moved to UsdAPISchemaBase and now
+  require a UsdPrim. Also improved documentation.
+- Property queries on UsdPrim now accept a predicate for filtering results.
+- UsdPrim::HasAPI now accepts an instance name argument to query if a prim has
+  a particular instance of a multiple-apply API schema has been applied.
+- Adding or removing an inert prim spec no longer causes affected prims to
+  be resynced. These prims are now reported as "changed info only" in the
+  corresponding UsdNotice::ObjectsChanged notice.
+- UsdNotice::ObjectsChanged::GetResyncedPaths and GetChangedInfoOnlyPaths now
+  return a custom range object instead of a SdfPathVector.
+- Performance optimizations for querying properties on UsdPrim.
+- Replaced UsdCollectionAPI::AddPrim/RemovePrim with IncludePath/ExcludePath.
+- UsdGeomBoundable::ComputeExtentFromPlugins now accepts an optional 
+  transform matrix, which may be used to provide more accurate bounds.
+- UsdGeomBBoxCache now computes extents for all UsdGeomBoundable schemas.
+- Performance optimizations in UsdShadeMaterialBindingAPI.
+- Numerous changes and fixes to UsdSkel schemas.
+- Significantly improved curve rendering in Hydra.
+- Many improvements towards the goal of getting modern UsdShade materials
+  through Hydra to various kinds of backends.
+- Performance improvements to hydra gather phase via multi-threading and other
+  optimizations.
+- Changed complexity options in usdview to prevent users from inadvertently
+  bumping the complexity value too high and hanging the application.
+- Several tweaks and improvements to usdview UI.
+- Refactored Maya/Hydra batch renderer to improve performance for imaging USD
+  proxy shape nodes.
+
+### Removed
+- UsdShadeLook schema. This has been replaced by UsdShadeMaterial.
+  Material bindings authored using the "look:binding" relationship are no
+  longer respected.
+
+### Fixed
+- Various typo and compiler warning fixes throughout the codebase.
+- Fixed bug where build_usd.py would not use the CMake generator specified at
+  the command line.
+- Fixed crash in Apply method on API schemas. 
+- Fixed several bugs in UsdShadeMaterialBindingAPI::ComputeBoundMaterial.
+- Changing the population mask for a UsdStage now correctly releases resources
+  used by objects that have been excluded from the stage.
+- Fixed quadrangulation bug in Hydra with handling topology with degenerate or 
+  hole faces.
+- Fixed patch param refinement for Loop meshes.
+- Several fixes to the nascent Hydra lights pipeline.
+- Fixed bug in the usdExport AlembicChaser in the Maya plugin where primvars 
+  that match the primvarprefix do not get exported. They are now exported with 
+  constant interpolation, and using _AbcGeomScope is no longer required.
+- Fixed bug in Katana plugin where infinite recursion would occur in pxrUsdIn
+  when sources were outside the scope of the point instancer. (Issue #286)
+
+## [0.8.3] - 2018-02-05
+
+### Added
+- Compression in .usdc files for integer arrays and scalar floating point 
+  arrays. The latter are compressed if the values are all integers or there 
+  are a small number of unique values. In the example Kitchen Set asset on 
+  the USD website, the total size of the geometry layers decreased by ~46%, 
+  from 25 MB to 14 MB.
+
+  .usdc files with this new compression enabled are marked as version 0.6.0
+  and are not readable by earlier releases. These files are not written by
+  default; this may be enabled by setting the environment variable 
+  `USD_WRITE_NEW_USDC_FILES_AS_VERSION` to "0.6.0".
+- Ability to record and query API schemas that have been applied to a prim
+  via new Apply method on API schema classes, UsdPrim::GetAppliedSchemas and
+  UsdPrim::HasAPI. Custom API schemas should be updated with these new
+  methods by re-running usdGenSchema.
+- GetUnionedTimeSamples and GetUnionedTimeSamplesInInterval functions for
+  UsdAttribute and UsdAttributeQuery.
+- Ability to offset time for active value clips when using template clip 
+  metadata via "templateActiveOffset" entry.
+- UsdUtilsGetDirtyLayers for retrieving dirty layers used by a UsdStage.
+- GetTimeSamplesInInterval functions for UsdGeomXformOp, UsdGeomXformable 
+  and UsdGeomXformable::XformQuery.
+- UsdShadeMaterialBindingAPI, which provides an interface for binding 
+  materials to prims or collections of prims and computing the final bound
+  material for a prim via "material resolution".
+- Numerous features and documentation for UsdSkel schema.
+- "Save Flattened As" functionality in usdview.
+- Plugin mechanism in usdview that allows users to add custom commands 
+  and menus. See new tutorial for more details.
+- Partial support for RenderMan for Maya lights in the Maya plugin.
+- PxrUsdIn.BootstrapMaterialGroup op in Katana plugin for more robustly reading 
+  a Looks scope from a .usd file
+
+### Changed
+- Build now supports versioned OpenEXR and IlmBase shared libraries. (Issue #71)
+- Layer identifiers may now include '?' characters. (Issue #289)
+- UsdStage preserves payload load state when processing instancing changes.
+- UsdListPosition enum values now specify the "append" or "prepend" list as 
+  well as a position to provide users with finer-grained control.
+- The various Add... methods in Usd that take a UsdListPosition argument
+  now author entries to the back of the "prepend" list by default if no
+  "explicit" list exists. The old behavior of authoring to the (now 
+  deprecated) "added" list can be restored by setting the environment
+  variable `USD_AUTHOR_OLD_STYLE_ADD` to 1.
+- Standard schema conventions are more strictly-enforced in usdGenSchema.
+- UsdCollectionAPI::AddCollection has been renamed ApplyCollection.
+- Enabled authoring of new UsdShade encoding by default. Authoring the old
+  (now deprecated) encoding can be restored by setting the environment variable 
+  `USD_SHADE_WRITE_NEW_ENCODING` to 0.
+- The "joints" relationship on the UsdSkelSkeleton, UsdSkelPackedJointAnimation,
+  and UsdSkelBinding API schemas is now a token array-valued attribute.
+- UsdRiStatements API schema has been renamed to UsdRiStatementsAPI.
+- sdfdump utility now shows all specs in a layer, even if they have no fields.
+- Various improvements to Hydra reprs and geometry processing.
+- More improvements to Hydra's handling of invalid data.
+- Ongoing work to prepare Hydra to fully consume UsdShade schemas.
+- Refactored GL dependency out of Hd library.
+- Built-in variables in usdview interpreter are now accessed through a separate
+  usdviewApi object to avoid name collisions.
+- Performance improvements in Maya plugin when in Viewport 2.0.
+- Inclusion of info.usd.opArgs in Katana plugin is now parameterized; it will
+  be authored to the location where a "setOpArgsToInfo" attribute exists and is
+  set to 1.
+
+### Deprecated
+- The "added" list for list ops in scene description is deprecated in favor 
+  of the "prepend" and "append" lists.
+
+### Removed
+- GfCamera::ZUp and GfCamera::YUp.
+- UsdSkelJoint schema.
+
+### Fixed
+- build_usd.py ensures OpenImageIO build does not pick up OpenEXR from other 
+  locations, which could have led to runtime errors. (Issue #315, Issue #325)
+- Headers are now installed properly for monolithic builds. (Issue #277)
+- Original install location will no longer be searched for plugins after
+  relocating builds. (Issue #363)
+- Fixed thread-safety issue where plugins with the same name but in different
+  locations could be loaded twice. (Issue #358)
+- Fixed bug where layers that were muted via SdfLayer::AddToMutedLayers before
+  they were first opened could not be unmuted.
+- Fixed bug in usdGenSchema where changing an existing property's type in a 
+  schema would not be reflected in the generated code.
+- Fixed bug where a large (> 1460) number of variants in a .usda file would
+  cause a "memory exhausted" error when parsing that file.
+- Fixed broken pread mode for .usdc files.
+- Fixed bug that caused UsdStage::CreateNew to crash on Windows. (Issue #364)
+- Fixed bug when using a UsdStagePopulationMask with prims beneath instances. 
+  (Issue #312)
+- Fixed bug where setting float-valued attributes to +inf in Python would fail.
+- UsdAttribute::GetTimeSamplesInInterval now properly accounts for layer 
+  offsets. (Issue #352)
+- Internal references or empty asset paths no longer cause errors in 
+  UsdUtilsFlattenLayerStack.
+- Fixed bug where UsdGeomPrimvar::GetTimeSamples would miss time samples for
+  indexed primvars.
+- Disabled tiny prim culling in Hydra by default. It can be re-enabled by
+  setting the environment variable `HD_ENABLE_TINY_PRIM_CULLING` to 1.
+  (Issue #314)
+- Fixed issues with using non-file-backed asset paths in various utilities
+  and Maya and Katana plugins.
+- Houdini plugin explicitly links against required libraries to avoid runtime
+  errors with Houdini 16.5.
+- Fixed several bugs with point instancing support in Houdini plugin.
+
 ## [0.8.2] - 2017-12-01
 
 Release 0.8.2 increments the file format version for .usdc files. New .usdc
